@@ -1,0 +1,6 @@
+[
+  {"name": "inconus-api-erp-v2", "url": "github.com/inconus/api-erp-v2", "domain": "건설 ERP", "repoPath": "/mnt/c/Inconus/inconus-api-erp-v2", "status": "ready"},
+  {"name": "bodylogic-ai", "url": "github.com/SeongJinAI/bodylogic-ai", "domain": "근골격계 AI 케어", "repoPath": "/mnt/c/MyProject/seongjinAI/bodylogic-ai", "status": "active"},
+  {"name": "inconus-hr-system", "url": "github.com/inconus/hr-system", "domain": "인사관리", "repoPath": "", "status": "ready"},
+  {"name": "ecommerce-api", "url": "github.com/myorg/ecommerce-api", "domain": "이커머스", "repoPath": "", "status": "ready"}
+]

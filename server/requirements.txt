@@ -1,0 +1,7 @@
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+python-dotenv==1.1.*
+watchfiles==1.0.*
+aiofiles==24.*
+pydantic==2.*
+aiosqlite==0.20.*

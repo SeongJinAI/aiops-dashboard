@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: ./server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ${PROJECT_DIR:-.}/.aiops:/watch/.aiops:ro
+    environment:
+      - PROJECTS_FILE=/app/data/projects.json
+      - LOG_DIR=/watch/.aiops
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

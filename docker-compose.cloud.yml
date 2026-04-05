@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  backend:
+    build: ./server
+    ports:
+      - "8000:8000"
+    volumes:
+      - db-data:/app/data
+    environment:
+      - AIOPS_MODE=saas
+      - AIOPS_API_KEYS=${AIOPS_API_KEYS}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-24}
+      - AIOPS_CORS_ORIGINS=${AIOPS_CORS_ORIGINS:-https://dashboard.example.com}
+      - PROJECTS_FILE=/app/data/projects.json
+      - DB_PATH=/app/data/aiops.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
