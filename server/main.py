@@ -12,7 +12,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 # server/ 디렉토리를 모듈 경로에 추가
 sys.path.insert(0, os.path.dirname(__file__))
 
-from routers import logs, projects, health, repos, ingest, auth, claude_config
+from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts
 from services.log_reader import get_log_dir, watch_log_files
 from services.log_store import AIOPS_MODE
 
@@ -81,6 +81,7 @@ app.include_router(repos.router, prefix="/api/repos")
 app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/api/auth")
 app.include_router(claude_config.router, prefix="/api/claude-config")
+app.include_router(scripts.router, prefix="/api/scripts")
 
 
 @app.websocket("/ws/logs")

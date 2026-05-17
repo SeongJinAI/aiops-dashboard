@@ -1,5 +1,6 @@
 import { C } from '../constants/colors';
 import type { Project } from '../types';
+import { ConnectionStatus } from './ConnectionStatus';
 
 interface TopBarProps {
   activeProject: Project;
@@ -21,8 +22,8 @@ export function TopBar({ activeProject, onLogout, email }: TopBarProps) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <ConnectionStatus />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.green }} />
           <span style={{ fontSize: 11, color: C.dim }}>활성:</span>
           <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{activeProject.name}</span>
         </div>

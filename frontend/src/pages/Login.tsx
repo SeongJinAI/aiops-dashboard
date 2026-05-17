@@ -3,7 +3,7 @@ import { C } from '../constants/colors';
 
 interface Props {
   onLogin: (email: string, password: string) => Promise<void>;
-  onRegister: (tenantName: string, email: string, password: string) => Promise<void>;
+  onRegister: (tenantName: string, email: string, password: string) => Promise<{ apiKey: string }>;
 }
 
 export function Login({ onLogin, onRegister }: Props) {
@@ -22,7 +22,9 @@ export function Login({ onLogin, onRegister }: Props) {
       if (mode === 'login') {
         await onLogin(email, password);
       } else {
-        await onRegister(tenantName, email, password);
+        const { apiKey } = await onRegister(tenantName, email, password);
+        // API 키는 일회성 노출 — 연결 설정 페이지에서 보여준 후 즉시 삭제
+        sessionStorage.setItem('aiops_new_api_key', apiKey);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');

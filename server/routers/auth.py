@@ -1,11 +1,17 @@
 """
-인증 API — 로그인, 회원가입, 사용자 정보 조회
+인증 API — 로그인, 회원가입, 사용자 정보 조회, API 키 관리
 """
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from services.auth import hash_password, verify_password, create_jwt
-from services.db import DB_PATH, init_db
+from services.auth import (
+    hash_password,
+    verify_password,
+    create_jwt,
+    generate_api_key,
+    hash_api_key,
+)
+from services.db import DB_PATH
 from middleware.auth import get_current_user
 
 router = APIRouter()
@@ -28,6 +34,21 @@ class TokenResponse(BaseModel):
     email: str
 
 
+class RegisterResponse(BaseModel):
+    token: str
+    tenant_id: str
+    email: str
+    api_key: str  # 가입 시에만 평문 반환
+
+
+class ApiKeyResponse(BaseModel):
+    api_key: str  # 재발급 시에만 평문 반환
+
+
+class ApiKeyStatus(BaseModel):
+    has_key: bool
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest):
     async with aiosqlite.connect(str(DB_PATH)) as conn:
@@ -45,24 +66,23 @@ async def login(req: LoginRequest):
     return TokenResponse(token=token, tenant_id=user["tenant_id"], email=user["email"])
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=RegisterResponse)
 async def register(req: RegisterRequest):
     import uuid
     tenant_id = str(uuid.uuid4())[:8]
     pw_hash = hash_password(req.password)
+    api_key = generate_api_key()
+    key_hash = hash_api_key(api_key)
 
     async with aiosqlite.connect(str(DB_PATH)) as conn:
-        # 이메일 중복 체크
         cursor = await conn.execute("SELECT id FROM users WHERE email = ?", (req.email,))
         if await cursor.fetchone():
             raise HTTPException(status_code=409, detail="이미 등록된 이메일입니다")
 
-        # 테넌트 생성
         await conn.execute(
-            "INSERT INTO tenants (id, name, api_key_hash) VALUES (?, ?, '')",
-            (tenant_id, req.tenant_name),
+            "INSERT INTO tenants (id, name, api_key_hash) VALUES (?, ?, ?)",
+            (tenant_id, req.tenant_name, key_hash),
         )
-        # 사용자 생성
         await conn.execute(
             "INSERT INTO users (tenant_id, email, password_hash) VALUES (?, ?, ?)",
             (tenant_id, req.email, pw_hash),
@@ -70,9 +90,36 @@ async def register(req: RegisterRequest):
         await conn.commit()
 
     token = create_jwt(tenant_id, req.email)
-    return TokenResponse(token=token, tenant_id=tenant_id, email=req.email)
+    return RegisterResponse(token=token, tenant_id=tenant_id, email=req.email, api_key=api_key)
 
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return {"tenant_id": user["tenant_id"], "email": user["sub"]}
+
+
+@router.get("/api-key", response_model=ApiKeyStatus)
+async def api_key_status(user: dict = Depends(get_current_user)):
+    """현재 API 키 발급 여부를 반환한다 (평문 키는 반환하지 않음 — 해시만 저장하기 때문)."""
+    async with aiosqlite.connect(str(DB_PATH)) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT api_key_hash FROM tenants WHERE id = ?", (user["tenant_id"],)
+        )
+        row = await cursor.fetchone()
+    has_key = bool(row and row["api_key_hash"])
+    return ApiKeyStatus(has_key=has_key)
+
+
+@router.post("/api-key/regenerate", response_model=ApiKeyResponse)
+async def regenerate_api_key(user: dict = Depends(get_current_user)):
+    """API 키를 재발급한다. 이전 키는 즉시 무효화된다."""
+    new_key = generate_api_key()
+    new_hash = hash_api_key(new_key)
+    async with aiosqlite.connect(str(DB_PATH)) as conn:
+        await conn.execute(
+            "UPDATE tenants SET api_key_hash = ? WHERE id = ?",
+            (new_hash, user["tenant_id"]),
+        )
+        await conn.commit()
+    return ApiKeyResponse(api_key=new_key)

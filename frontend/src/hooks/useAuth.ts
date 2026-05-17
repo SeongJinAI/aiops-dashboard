@@ -34,22 +34,26 @@ export function useAuth() {
     setAuth({ token: data.token, tenantId: data.tenant_id, email: data.email });
   }, []);
 
-  const register = useCallback(async (tenantName: string, email: string, password: string) => {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_name: tenantName, email, password }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || '회원가입 실패');
-    }
-    const data = await res.json();
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(TENANT_KEY, data.tenant_id);
-    localStorage.setItem(EMAIL_KEY, data.email);
-    setAuth({ token: data.token, tenantId: data.tenant_id, email: data.email });
-  }, []);
+  const register = useCallback(
+    async (tenantName: string, email: string, password: string): Promise<{ apiKey: string }> => {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_name: tenantName, email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '회원가입 실패');
+      }
+      const data = await res.json();
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(TENANT_KEY, data.tenant_id);
+      localStorage.setItem(EMAIL_KEY, data.email);
+      setAuth({ token: data.token, tenantId: data.tenant_id, email: data.email });
+      return { apiKey: data.api_key };
+    },
+    []
+  );
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);

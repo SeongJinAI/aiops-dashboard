@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { C } from './constants/colors';
 import { TopBar } from './components/TopBar';
 import { TabBar } from './components/TabBar';
@@ -11,28 +11,30 @@ import { WorkflowTracker } from './pages/WorkflowTracker';
 import { PromptHistory } from './pages/PromptHistory';
 import { MisunderstandingTracker } from './pages/MisunderstandingTracker';
 import { ClaudeConfig } from './pages/ClaudeConfig';
+import { Connections } from './pages/Connections';
+import { OnboardingWizard } from './pages/OnboardingWizard';
 import { Login } from './pages/Login';
 import { useAuth } from './hooks/useAuth';
+import { apiPost } from './hooks/useApi';
 import type { Project } from './types';
 
 const DEFAULT_PROJECT: Project = { name: "-", url: "", domain: "", status: "ready" };
+const NEW_KEY_SESSION = 'aiops_new_api_key';
+const ONBOARDED_FLAG = 'aiops_onboarded';
 
 export default function App() {
   const [tab, setTab] = useState("repo-map");
   const [activeProject, setActiveProject] = useState<Project>(DEFAULT_PROJECT);
   const { auth, login, register, logout, isAuthenticated } = useAuth();
   const [needsAuth, setNeedsAuth] = useState<boolean | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardApiKey, setWizardApiKey] = useState<string | null>(null);
 
-  // 서버가 인증을 요구하는지 확인 (local 모드면 인증 불필요)
+  // 서버 운영 모드 확인 — saas 모드면 인증 필요 (공개 엔드포인트)
   useEffect(() => {
-    fetch('/api/health')
-      .then(res => {
-        if (res.status === 401) {
-          setNeedsAuth(true);
-        } else {
-          setNeedsAuth(false);
-        }
-      })
+    fetch('/api/mode')
+      .then(res => res.json())
+      .then(data => setNeedsAuth(!!data.auth_required))
       .catch(() => setNeedsAuth(false));
   }, []);
 
@@ -47,6 +49,46 @@ export default function App() {
       .catch(() => {});
   }, [auth.token]);
 
+  // 신규 가입자 자동 위저드 트리거
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const freshKey = sessionStorage.getItem(NEW_KEY_SESSION);
+    const onboarded = localStorage.getItem(ONBOARDED_FLAG) === '1';
+    if (freshKey && !onboarded) {
+      setWizardApiKey(freshKey);
+      setShowWizard(true);
+      sessionStorage.removeItem(NEW_KEY_SESSION);
+    }
+  }, [isAuthenticated]);
+
+  const handleWizardClose = useCallback(() => {
+    setShowWizard(false);
+  }, []);
+
+  const handleWizardComplete = useCallback(() => {
+    localStorage.setItem(ONBOARDED_FLAG, '1');
+    setShowWizard(false);
+    setWizardApiKey(null);
+    setTab('main');
+    // 활성 프로젝트 재조회
+    const headers: Record<string, string> = {};
+    if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`;
+    fetch('/api/projects/active', { headers })
+      .then(res => res.json())
+      .then(data => { if (data && data.name) setActiveProject(data); })
+      .catch(() => {});
+  }, [auth.token]);
+
+  const handleReopenWizard = useCallback(() => {
+    setWizardApiKey(null); // 평문 키 없음 → 재발급 안내 모드
+    setShowWizard(true);
+  }, []);
+
+  const handleRegenerate = useCallback(async () => {
+    const res = await apiPost<{ api_key: string }>('/auth/api-key/regenerate', {});
+    return res.api_key;
+  }, []);
+
   // 인증 확인 중
   if (needsAuth === null) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: C.dim }}>로딩 중...</div>;
@@ -56,6 +98,8 @@ export default function App() {
   if (needsAuth && !isAuthenticated) {
     return <Login onLogin={login} onRegister={register} />;
   }
+
+  const apiBase = window.location.origin;
 
   return (
     <div style={{ fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: C.bg, color: C.text, minHeight: "100vh" }}>
@@ -80,9 +124,21 @@ export default function App() {
         {tab === "prompts" && <PromptHistory />}
         {tab === "misunderstandings" && <MisunderstandingTracker />}
         {tab === "claude-config" && <ClaudeConfig />}
+        {tab === "connections" && <Connections onReopenWizard={handleReopenWizard} />}
       </div>
 
       <ChatBot activeProject={activeProject} />
+
+      {showWizard && (
+        <OnboardingWizard
+          apiKey={wizardApiKey}
+          tenantId={auth.tenantId || ''}
+          apiBase={apiBase}
+          onClose={handleWizardClose}
+          onComplete={handleWizardComplete}
+          onRegenerate={handleRegenerate}
+        />
+      )}
     </div>
   );
 }

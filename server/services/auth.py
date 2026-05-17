@@ -3,13 +3,17 @@
 """
 import hashlib
 import os
+import secrets
 import time
 import json
 import base64
 import hmac
 
-# API 키 설정: "tenant1:key1,tenant2:key2" 형식
+# API 키 설정 (env 폴백): "tenant1:key1,tenant2:key2" 형식
 _RAW_KEYS = os.getenv("AIOPS_API_KEYS", "")
+
+# API 키 prefix (사용자가 한 눈에 알아볼 수 있게)
+API_KEY_PREFIX = "aiops_"
 
 # JWT 설정
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
@@ -34,16 +38,36 @@ _API_KEYS = _parse_api_keys()
 
 
 def verify_api_key(api_key: str) -> str | None:
-    """API 키를 검증하고 tenant_id를 반환한다. 실패 시 None."""
+    """[Deprecated] 환경변수 기반 API 키 검증. saas 모드에서는 verify_api_key_db 사용."""
     for tenant_id, key in _API_KEYS.items():
         if key == api_key:
             return tenant_id
     return None
 
 
+async def verify_api_key_db(api_key: str) -> str | None:
+    """DB에서 API 키 해시를 조회하여 tenant_id를 반환한다."""
+    import aiosqlite
+    from services.db import DB_PATH
+
+    key_hash = hash_api_key(api_key)
+    async with aiosqlite.connect(str(DB_PATH)) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT id FROM tenants WHERE api_key_hash = ?", (key_hash,)
+        )
+        row = await cursor.fetchone()
+    return row["id"] if row else None
+
+
 def hash_api_key(key: str) -> str:
     """API 키를 SHA256으로 해싱한다."""
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def generate_api_key() -> str:
+    """안전한 랜덤 API 키를 생성한다. 형식: aiops_{32자 토큰}"""
+    return f"{API_KEY_PREFIX}{secrets.token_urlsafe(24)}"
 
 
 def hash_password(password: str) -> str:

@@ -13,8 +13,13 @@ frontend/dist/
 .env
 .env.local
 
-# Data (runtime)
-data/aiops.db
+# Data (runtime) — SQLite DB는 시크릿이 들어갈 수 있으므로 절대 커밋 금지
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+server/data/
 logs/
 
 # IDE

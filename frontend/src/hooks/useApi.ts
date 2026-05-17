@@ -8,6 +8,14 @@ function authHeaders(): Record<string, string> {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+function handleUnauthorized() {
+  // 토큰 만료 또는 무효 — localStorage 정리 후 로그인 화면으로
+  localStorage.removeItem('aiops_token');
+  localStorage.removeItem('aiops_tenant_id');
+  localStorage.removeItem('aiops_email');
+  window.location.reload();
+}
+
 export function useApi<T>(endpoint: string, defaultValue: T) {
   const [data, setData] = useState<T>(defaultValue);
   const [loading, setLoading] = useState(true);
@@ -19,6 +27,10 @@ export function useApi<T>(endpoint: string, defaultValue: T) {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         headers: authHeaders(),
       });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -43,6 +55,10 @@ export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

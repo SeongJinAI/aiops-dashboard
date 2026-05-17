@@ -29,4 +29,5 @@ export const TABS = [
   { key: "prompts", label: "프롬프트" },
   { key: "misunderstandings", label: "오해 추적" },
   { key: "claude-config", label: "Claude 설정" },
+  { key: "connections", label: "연결 설정" },
 ] as const;

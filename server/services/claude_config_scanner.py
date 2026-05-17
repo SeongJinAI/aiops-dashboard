@@ -166,12 +166,31 @@ def _extract_plugins(settings: dict | None) -> list[str]:
     return settings.get("enabledPlugins", [])
 
 
-def scan_project_config() -> dict:
-    """활성 프로젝트 레포의 Claude 설정을 스캔한다."""
-    if AIOPS_MODE == "saas" or not PROJECT_REPO:
-        return _empty_config("project")
+def scan_project_config(tenant_id: str | None = None) -> dict:
+    """활성 프로젝트 레포의 Claude 설정을 스캔한다.
 
+    Local 모드: PROJECT_REPO env 우선
+    SaaS 모드: 해당 tenant의 활성 프로젝트 repoPath를 sqlite에서 sync 조회
+    """
     repo = PROJECT_REPO
+    if AIOPS_MODE == "saas" and tenant_id:
+        try:
+            import sqlite3
+            from services.db import DB_PATH
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT repo_path FROM projects WHERE tenant_id = ? AND status = 'active' LIMIT 1",
+                (tenant_id,),
+            ).fetchone()
+            conn.close()
+            if row and row["repo_path"]:
+                repo = row["repo_path"]
+        except Exception:
+            pass
+
+    if not repo:
+        return _empty_config("project")
     claude_dir = os.path.join(repo, ".claude")
     has_claude_dir = os.path.isdir(claude_dir)
 
@@ -235,10 +254,13 @@ def scan_project_config() -> dict:
 
 
 def scan_global_config() -> dict:
-    """글로벌(거버넌스) 범위의 Claude 설정을 스캔한다."""
-    if AIOPS_MODE == "saas":
-        return _empty_config("global")
+    """글로벌(거버넌스) 범위의 Claude 설정을 스캔한다.
 
+    Local 모드: 서버 머신의 ~/.claude/ 직접 스캔
+    SaaS 모드: 동일하게 서버 머신의 ~/.claude/ 스캔
+        (단일 머신 자체 호스팅 시 사용자 PC == 서버, 그대로 동작.
+         원격 배포 시에는 사용자별 ~/.claude/ 정보를 Hook이 ingest 업로드하는 방식으로 분리 필요 — 추후 백로그)
+    """
     # 글로벌 settings.json
     settings_path = os.path.join(CLAUDE_HOME, "settings.json")
     settings = _read_json(settings_path)
