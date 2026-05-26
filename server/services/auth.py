@@ -46,17 +46,23 @@ def verify_api_key(api_key: str) -> str | None:
 
 
 async def verify_api_key_db(api_key: str) -> str | None:
-    """DB에서 API 키 해시를 조회하여 tenant_id를 반환한다."""
+    """DB에서 API 키 해시를 조회하여 tenant_id를 반환한다.
+
+    DB가 초기화되지 않은 local 모드 등에서는 None을 반환하여 env 폴백으로 넘어간다.
+    """
     import aiosqlite
     from services.db import DB_PATH
 
     key_hash = hash_api_key(api_key)
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT id FROM tenants WHERE api_key_hash = ?", (key_hash,)
-        )
-        row = await cursor.fetchone()
+    try:
+        async with aiosqlite.connect(str(DB_PATH)) as conn:
+            conn.row_factory = aiosqlite.Row
+            cursor = await conn.execute(
+                "SELECT id FROM tenants WHERE api_key_hash = ?", (key_hash,)
+            )
+            row = await cursor.fetchone()
+    except Exception:
+        return None
     return row["id"] if row else None
 
 
@@ -71,12 +77,30 @@ def generate_api_key() -> str:
 
 
 def hash_password(password: str) -> str:
-    """비밀번호를 SHA256으로 해싱한다."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """비밀번호를 bcrypt로 해싱한다 (cost factor 12)."""
+    import bcrypt
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def _is_bcrypt(h: str) -> bool:
+    return h.startswith("$2a$") or h.startswith("$2b$") or h.startswith("$2y$")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return hash_password(password) == password_hash
+    """비밀번호 검증. bcrypt와 레거시 SHA256을 모두 지원한다."""
+    import bcrypt
+    if _is_bcrypt(password_hash):
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        except Exception:
+            return False
+    # 레거시: SHA256
+    return hashlib.sha256(password.encode()).hexdigest() == password_hash
+
+
+def needs_rehash(password_hash: str) -> bool:
+    """저장된 해시가 bcrypt 형식이 아니면 재해싱 권장."""
+    return not _is_bcrypt(password_hash)
 
 
 # --- JWT (외부 라이브러리 없이 구현) ---

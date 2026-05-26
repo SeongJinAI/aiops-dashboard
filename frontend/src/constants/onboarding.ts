@@ -18,7 +18,11 @@ export function detectEnv(): Env {
 }
 
 export interface EnvCommands {
+  /** 한 줄 통합 명령 — .env 패치 + 레포 등록 + Hook 설치 + 테스트 ping 모두 자동. */
+  oneLineInstall: string;
+  /** 기존 2단계 방식 (수동 옵션) — ~/.claude/.env 에 변수 3개 추가. */
   envPatch: string;
+  /** 기존 2단계 방식 (수동 옵션) — Hook 스크립트 설치. */
   installHook: string;
 }
 
@@ -28,6 +32,8 @@ export function envCommands(
   apiKey: string,
   tenantId: string,
 ): EnvCommands {
+  const installUrl = `${apiBase}/api/scripts/install.sh?token=${encodeURIComponent(apiKey)}`;
+
   if (env === 'windows') {
     const envPath = '$env:USERPROFILE\\.claude\\.env';
     const lines = [
@@ -36,6 +42,9 @@ export function envCommands(
       `AIOPS_TENANT_ID=${tenantId}`,
     ].join('`n');
     return {
+      // PowerShell에서 WSL bash로 실행 (Windows native bash 가정 — git for windows 등)
+      oneLineInstall:
+        `bash -c "$(curl -fsSL '${installUrl}')"`,
       envPatch:
         `New-Item -ItemType Directory -Force "$env:USERPROFILE\\.claude" | Out-Null; ` +
         `Add-Content -Path "${envPath}" -Value "${lines}"`,
@@ -51,6 +60,7 @@ export function envCommands(
     `AIOPS_TENANT_ID=${tenantId}\\n`;
 
   return {
+    oneLineInstall: `bash -c "$(curl -fsSL '${installUrl}')"`,
     envPatch: `mkdir -p ~/.claude && printf '${linesPosix}' >> ~/.claude/.env`,
     installHook:
       `AIOPS_REMOTE_URL=${apiBase} ` +

@@ -11,6 +11,7 @@ import { WorkflowTracker } from './pages/WorkflowTracker';
 import { PromptHistory } from './pages/PromptHistory';
 import { MisunderstandingTracker } from './pages/MisunderstandingTracker';
 import { ClaudeConfig } from './pages/ClaudeConfig';
+import { Agent } from './pages/Agent';
 import { Connections } from './pages/Connections';
 import { OnboardingWizard } from './pages/OnboardingWizard';
 import { Login } from './pages/Login';
@@ -124,6 +125,7 @@ export default function App() {
         {tab === "prompts" && <PromptHistory />}
         {tab === "misunderstandings" && <MisunderstandingTracker />}
         {tab === "claude-config" && <ClaudeConfig />}
+        {tab === "agent" && <Agent />}
         {tab === "connections" && <Connections onReopenWizard={handleReopenWizard} />}
       </div>
 

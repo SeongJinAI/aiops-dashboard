@@ -59,6 +59,16 @@ export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
     handleUnauthorized();
     throw new Error('Unauthorized');
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    // 백엔드 detail을 추출해서 그대로 throw
+    let detail = `HTTP ${res.status}`;
+    try {
+      const err = await res.json();
+      if (err?.detail) detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      try { const t = await res.text(); if (t) detail = t; } catch { /* ignore */ }
+    }
+    throw new Error(detail);
+  }
   return res.json();
 }

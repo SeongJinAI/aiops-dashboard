@@ -50,6 +50,55 @@ CREATE TABLE IF NOT EXISTS projects (
     status TEXT DEFAULT 'ready',
     UNIQUE(tenant_id, name)
 );
+
+-- Hermes Agent: 프로젝트 위키 자동 생성기
+CREATE TABLE IF NOT EXISTS hermes_wikis (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    TEXT NOT NULL,
+    project_name TEXT NOT NULL,
+    perspective  TEXT NOT NULL,   -- 'planner' | 'developer' | 'user'
+    content      TEXT NOT NULL,
+    version      INTEGER DEFAULT 1,
+    updated_at   TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, project_name, perspective, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hermes_wikis_lookup
+    ON hermes_wikis(tenant_id, project_name, perspective, version DESC);
+
+CREATE TABLE IF NOT EXISTS hermes_wiki_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    TEXT NOT NULL,
+    project_name TEXT NOT NULL,
+    status       TEXT NOT NULL,   -- 'running' | 'success' | 'failed'
+    started_at   TEXT DEFAULT (datetime('now')),
+    finished_at  TEXT,
+    input_count  INTEGER DEFAULT 0,
+    output_chars INTEGER DEFAULT 0,
+    error        TEXT,
+    diff_summary TEXT
+);
+
+-- 사용자별 외부 API 키 (BYOK) — 평문 X, AES-GCM 암호화 후 저장
+CREATE TABLE IF NOT EXISTS tenant_secrets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   TEXT NOT NULL,
+    kind        TEXT NOT NULL,   -- 'anthropic' | (향후) 'openai' | 'github' ...
+    ciphertext  TEXT NOT NULL,   -- base64(nonce + AES-GCM ciphertext)
+    preview     TEXT,            -- 마스킹된 미리보기 ('sk-ant-...***xyz')
+    created_at  TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT,
+    UNIQUE(tenant_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS hermes_souls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    TEXT NOT NULL,
+    project_name TEXT NOT NULL,
+    soul         TEXT,
+    updated_at   TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, project_name)
+);
 """
 
 _SYSTEM_PREFIXES = ("<task-notification>", "<system-reminder>", "<command-name>", "<local-command")

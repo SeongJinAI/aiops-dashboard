@@ -5,3 +5,7 @@ watchfiles==1.0.*
 aiofiles==24.*
 pydantic==2.*
 aiosqlite==0.20.*
+bcrypt==4.*
+slowapi==0.1.*
+anthropic>=0.40,<1.0
+cryptography>=3.4,<46

@@ -12,7 +12,15 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 # server/ 디렉토리를 모듈 경로에 추가
 sys.path.insert(0, os.path.dirname(__file__))
 
-from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts
+# 환경변수 검증 (위험한 기본값이면 운영 시 종료)
+from services.env_check import print_validation
+print_validation()
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from services.rate_limit import limiter
+
+from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts, hermes, secrets as secrets_router
 from services.log_reader import get_log_dir, watch_log_files
 from services.log_store import AIOPS_MODE
 
@@ -65,6 +73,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI OPS Dashboard", lifespan=lifespan)
 
+# Rate limit 등록
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS: 환경변수로 origins 설정 가능
 _cors_origins = os.getenv("AIOPS_CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")
 app.add_middleware(
@@ -82,6 +94,8 @@ app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/api/auth")
 app.include_router(claude_config.router, prefix="/api/claude-config")
 app.include_router(scripts.router, prefix="/api/scripts")
+app.include_router(hermes.router, prefix="/api/hermes")
+app.include_router(secrets_router.router, prefix="/api/secrets")
 
 
 @app.websocket("/ws/logs")

@@ -1,10 +1,12 @@
 """
 로그 수집 API — SaaS 모드에서 외부 Hook이 HTTP로 로그를 전송하는 엔드포인트
 """
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 from services.auth import verify_api_key, verify_api_key_db
 from services.db import insert_log, insert_logs_batch
+from services.secret_masker import mask_payload
+from services.rate_limit import limiter
 
 router = APIRouter()
 
@@ -33,31 +35,48 @@ async def _authenticate(api_key: str, requested_tenant: str | None) -> str:
 
 
 @router.post("/ingest")
-async def ingest_log(req: IngestRequest, x_api_key: str = Header()):
+@limiter.limit("300/minute")
+async def ingest_log(request: Request, req: IngestRequest, x_api_key: str = Header()):
     tenant_id = await _authenticate(x_api_key, req.tenant_id)
 
-    await insert_log(tenant_id, req.category, req.payload)
+    # 시크릿 마스킹 (DB 저장 전, EventBus publish 전)
+    safe_payload, found = mask_payload(req.payload)
+    if found:
+        safe_payload = {**safe_payload, "_masked_secrets": found}
+
+    await insert_log(tenant_id, req.category, safe_payload)
 
     try:
         from services.event_bus import event_bus
-        await event_bus.publish(tenant_id, req.category, req.payload)
+        await event_bus.publish(tenant_id, req.category, safe_payload)
     except (ImportError, AttributeError):
         pass
 
-    return {"status": "ok", "count": 1}
+    return {"status": "ok", "count": 1, "masked": found}
 
 
 @router.post("/ingest/batch")
-async def ingest_batch(req: IngestBatchRequest, x_api_key: str = Header()):
+@limiter.limit("60/minute")
+async def ingest_batch(request: Request, req: IngestBatchRequest, x_api_key: str = Header()):
     tenant_id = await _authenticate(x_api_key, req.tenant_id)
 
-    await insert_logs_batch(tenant_id, req.logs)
+    # 각 로그 payload 마스킹
+    safe_logs = []
+    all_masked: set[str] = set()
+    for log in req.logs:
+        safe_p, found = mask_payload(log.get("payload", {}))
+        if found:
+            safe_p = {**safe_p, "_masked_secrets": found}
+            all_masked.update(found)
+        safe_logs.append({**log, "payload": safe_p})
+
+    await insert_logs_batch(tenant_id, safe_logs)
 
     try:
         from services.event_bus import event_bus
-        for log in req.logs:
+        for log in safe_logs:
             await event_bus.publish(tenant_id, log["category"], log["payload"])
     except (ImportError, AttributeError):
         pass
 
-    return {"status": "ok", "count": len(req.logs)}
+    return {"status": "ok", "count": len(safe_logs), "masked": sorted(all_masked)}

@@ -2,7 +2,7 @@
 인증 API — 로그인, 회원가입, 사용자 정보 조회, API 키 관리
 """
 import aiosqlite
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from services.auth import (
     hash_password,
@@ -10,8 +10,10 @@ from services.auth import (
     create_jwt,
     generate_api_key,
     hash_api_key,
+    needs_rehash,
 )
 from services.db import DB_PATH
+from services.rate_limit import limiter
 from middleware.auth import get_current_user
 
 router = APIRouter()
@@ -50,7 +52,8 @@ class ApiKeyStatus(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest):
+@limiter.limit("10/minute")
+async def login(request: Request, req: LoginRequest):
     async with aiosqlite.connect(str(DB_PATH)) as conn:
         conn.row_factory = aiosqlite.Row
         cursor = await conn.execute(
@@ -62,12 +65,23 @@ async def login(req: LoginRequest):
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다")
 
+    # 레거시 SHA256 해시면 bcrypt로 자동 업그레이드
+    if needs_rehash(user["password_hash"]):
+        new_hash = hash_password(req.password)
+        async with aiosqlite.connect(str(DB_PATH)) as conn:
+            await conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (new_hash, user["id"]),
+            )
+            await conn.commit()
+
     token = create_jwt(user["tenant_id"], user["email"])
     return TokenResponse(token=token, tenant_id=user["tenant_id"], email=user["email"])
 
 
 @router.post("/register", response_model=RegisterResponse)
-async def register(req: RegisterRequest):
+@limiter.limit("5/minute")
+async def register(request: Request, req: RegisterRequest):
     import uuid
     tenant_id = str(uuid.uuid4())[:8]
     pw_hash = hash_password(req.password)
@@ -112,7 +126,8 @@ async def api_key_status(user: dict = Depends(get_current_user)):
 
 
 @router.post("/api-key/regenerate", response_model=ApiKeyResponse)
-async def regenerate_api_key(user: dict = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def regenerate_api_key(request: Request, user: dict = Depends(get_current_user)):
     """API 키를 재발급한다. 이전 키는 즉시 무효화된다."""
     new_key = generate_api_key()
     new_hash = hash_api_key(new_key)

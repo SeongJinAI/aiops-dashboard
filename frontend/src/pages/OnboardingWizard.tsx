@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { C } from '../constants/colors';
 import { ENV_LABELS, detectEnv, envCommands, type Env } from '../constants/onboarding';
 import { CodeBlock, EnvSelector } from '../components/onboarding/Snippets';
-import { apiPost } from '../hooks/useApi';
 import { getToken } from '../hooks/useAuth';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -15,13 +14,8 @@ interface OnboardingWizardProps {
   onRegenerate?: () => Promise<string>;
 }
 
-interface RegisteredRepo {
-  path: string;
-  name: string;
-}
-
-const TOTAL_STEPS = 5;
-const STEP_LABELS = ['환경', 'API 키', 'env 패치', '레포 + Hook', '연결 확인'];
+const TOTAL_STEPS = 4;
+const STEP_LABELS = ['환경', 'API 키', '원클릭 설치', '연결 확인'];
 
 export function OnboardingWizard({
   apiKey: initialApiKey,
@@ -31,14 +25,11 @@ export function OnboardingWizard({
   onComplete,
   onRegenerate,
 }: OnboardingWizardProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [step, setStep] = useState<number>(1);
   const [env, setEnv] = useState<Env | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(initialApiKey);
   const [regenerating, setRegenerating] = useState(false);
-  const [repos, setRepos] = useState<RegisteredRepo[]>([]);
-  const [newRepoInput, setNewRepoInput] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [detected, setDetected] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
 
@@ -47,12 +38,12 @@ export function OnboardingWizard({
     if (!env) setEnv(detectEnv());
   }, [env]);
 
-  // Step 5: 폴링 + 경과 타이머
+  // Step 4: 폴링 + 경과 타이머
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (step !== 5 || detected) {
+    if (step !== 4 || detected) {
       if (pollingRef.current) clearTimeout(pollingRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       return;
@@ -78,7 +69,7 @@ export function OnboardingWizard({
         /* ignore */
       }
       if (!cancelled) {
-        pollingRef.current = setTimeout(poll, 30_000);
+        pollingRef.current = setTimeout(poll, 10_000);
       }
     };
     poll();
@@ -94,9 +85,9 @@ export function OnboardingWizard({
     };
   }, [step, detected]);
 
-  // WebSocket: 첫 hooks 메시지 도착 시 detected=true
+  // WebSocket: 첫 hooks 메시지 도착 시 detected=true (통합 스크립트의 install_test ping도 잡힘)
   const wsHandler = useCallback(() => {
-    if (step === 5 && !detected) setDetected(true);
+    if (step === 4 && !detected) setDetected(true);
   }, [step, detected]);
   useWebSocket({ hooks: wsHandler });
 
@@ -116,35 +107,6 @@ export function OnboardingWizard({
     }
   };
 
-  const addRepo = async () => {
-    const path = newRepoInput.trim();
-    if (!path) return;
-    setAdding(true);
-    setRegisterError(null);
-    try {
-      const name = path.split(/[\\/]/).filter(Boolean).pop() || 'my-project';
-      await apiPost('/projects/swap', { name, repoPath: path, gitUrl: '' });
-      setRepos((prev) => [...prev, { path, name }]);
-      setNewRepoInput('');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '등록 실패';
-      // 중복(409 등) 처리 — message가 HTTP 409면 그대로 추가
-      if (msg.includes('409')) {
-        const name = path.split(/[\\/]/).filter(Boolean).pop() || 'my-project';
-        setRepos((prev) => [...prev, { path, name }]);
-        setNewRepoInput('');
-      } else {
-        setRegisterError(`레포 등록 실패: ${msg}. 경로를 확인하고 다시 시도해주세요.`);
-      }
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const removeRepo = (idx: number) => {
-    setRepos((prev) => prev.filter((_, i) => i !== idx));
-  };
-
   const canGoNext = (): boolean => {
     if (step === 1) return env !== null;
     if (step === 2) return apiKey !== null;
@@ -152,23 +114,19 @@ export function OnboardingWizard({
   };
 
   const isLastStep = step === TOTAL_STEPS;
-  const skipAvailable = step === 4 && repos.length === 0;
 
   const goNext = () => {
     if (isLastStep) {
       onComplete();
       return;
     }
-    setStep((prev) => (prev + 1) as typeof step);
+    setStep((prev) => prev + 1);
   };
 
   const goPrev = () => {
     if (step === 1) return;
-    setStep((prev) => (prev - 1) as typeof step);
+    setStep((prev) => prev - 1);
   };
-
-  const inputPlaceholder =
-    env === 'windows' ? 'C:\\Users\\me\\my-project' : '/Users/me/my-project (터미널에서 pwd 결과)';
 
   return (
     <div
@@ -212,7 +170,7 @@ export function OnboardingWizard({
           <div>
             <div style={{ fontSize: 17, fontWeight: 700, color: C.text }}>온보딩 위저드</div>
             <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>
-              5분 안에 본인 작업이 대시보드에 흐르도록 설정합니다.
+              4단계, 약 2분 안에 본인 작업이 대시보드에 흐르도록 설정합니다.
             </div>
           </div>
           <button
@@ -314,7 +272,8 @@ export function OnboardingWizard({
                   <p style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.6 }}>
                     Hook이 대시보드로 로그를 보낼 때 사용합니다.{' '}
                     <strong style={{ color: C.orange }}>지금 한 번만 표시되며</strong>, 페이지를
-                    떠나면 다시 볼 수 없습니다. 안전한 곳에 복사해두세요.
+                    떠나면 다시 볼 수 없습니다. 다음 단계의 설치 명령에 자동으로 포함되므로 별도
+                    복사는 선택사항입니다.
                   </p>
                   <div
                     style={{
@@ -355,161 +314,74 @@ export function OnboardingWizard({
           )}
 
           {step === 3 && commands && (
-            <StepBody title="환경변수 파일에 추가">
+            <StepBody title="원클릭 설치">
               <p style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.6 }}>
-                아래 명령어를 복사해서{' '}
-                <strong style={{ color: C.text }}>
-                  {env === 'windows' ? 'PowerShell' : '터미널'}
-                </strong>
-                에서 <strong style={{ color: C.text }}>한 번</strong> 실행하세요.{' '}
-                <code style={{ background: C.surfaceAlt, padding: '1px 5px', borderRadius: 3 }}>
-                  ~/.claude/.env
-                </code>{' '}
-                파일에 3줄이 추가됩니다.
-              </p>
-              <CodeBlock code={commands.envPatch} />
-              <p style={{ fontSize: 12, color: C.dim, marginTop: 12 }}>
-                실행 결과를 위저드가 자동 검증하지는 않습니다. 명령어 한 번 실행 후 다음 단계로
-                넘어가세요.
-              </p>
-            </StepBody>
-          )}
-
-          {step === 4 && commands && (
-            <StepBody title="레포 등록 + Hook 설치">
-              <p style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.6 }}>
-                추적할 레포 경로를 입력하세요. 여러 개 등록 가능합니다. 각 레포의 데이터는{' '}
-                <code style={{ background: C.surfaceAlt, padding: '1px 5px', borderRadius: 3 }}>
-                  repo
-                </code>{' '}
-                필드로 자동 분리됩니다.
+                추적할 <strong style={{ color: C.text }}>본인 레포의 루트 디렉토리</strong>로
+                이동한 뒤, 아래 한 줄을 터미널에서 실행하세요. 환경변수 설정, 레포 등록, Hook
+                설치, 연결 테스트가 자동으로 진행됩니다.
               </p>
 
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input
-                  value={newRepoInput}
-                  onChange={(e) => setNewRepoInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') addRepo();
-                  }}
-                  placeholder={inputPlaceholder}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    fontSize: 13,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 6,
-                    background: C.surface,
-                    color: C.text,
-                    fontFamily: 'inherit',
-                  }}
-                />
-                <button
-                  onClick={addRepo}
-                  disabled={adding || !newRepoInput.trim()}
-                  style={{
-                    background: C.accent,
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 6,
-                    padding: '8px 16px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: adding ? 'wait' : 'pointer',
-                    opacity: adding || !newRepoInput.trim() ? 0.6 : 1,
-                  }}
-                >
-                  {adding ? '등록 중...' : '+ 추가'}
-                </button>
+              <CodeBlock code={commands.oneLineInstall} />
+
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  background: C.bg,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: C.dim,
+                  lineHeight: 1.6,
+                }}
+              >
+                <div style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>
+                  자동으로 처리되는 항목
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  <li><code>~/.claude/.env</code>에 AIOPS_REMOTE_URL / API_KEY / TENANT_ID 추가</li>
+                  <li>현재 디렉토리를 활성 프로젝트로 자동 등록</li>
+                  <li><code>.claude/hooks/</code>에 Hook 스크립트 3종 설치 및 <code>settings.json</code> 갱신</li>
+                  <li>테스트 ping 전송 → 다음 단계에서 자동 감지</li>
+                </ul>
               </div>
 
-              {registerError && (
-                <div
-                  style={{
-                    background: '#fff5f5',
-                    border: `1px solid ${C.red}`,
-                    borderRadius: 6,
-                    padding: '10px 12px',
-                    fontSize: 12,
-                    color: C.red,
-                    marginBottom: 12,
-                  }}
-                >
-                  {registerError}
-                </div>
-              )}
+              <button
+                onClick={() => setShowAdvanced((v) => !v)}
+                style={{
+                  marginTop: 14,
+                  background: 'transparent',
+                  border: 'none',
+                  color: C.dim,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                }}
+              >
+                {showAdvanced ? '고급 옵션 닫기' : '고급: 2단계 수동 방식 보기'}
+              </button>
 
-              {repos.length > 0 ? (
-                <div style={{ marginBottom: 16 }}>
-                  {repos.map((r, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 12px',
-                        background: C.bg,
-                        border: `1px solid ${C.border}`,
-                        borderRadius: 6,
-                        marginBottom: 6,
-                        fontSize: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: i === repos.length - 1 ? C.green : C.dim,
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ color: C.text, fontWeight: 500 }}>{r.name}</div>
-                        <div style={{ color: C.dim, fontFamily: 'monospace', fontSize: 11 }}>
-                          {r.path}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeRepo(i)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: C.dim,
-                          fontSize: 16,
-                          cursor: 'pointer',
-                          padding: 4,
-                        }}
-                        aria-label="제거"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <p style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
-                    마지막 등록한 레포가 활성 상태로 설정됩니다.
+              {showAdvanced && (
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>
+                    1) 환경변수 추가 (한 번만)
+                  </p>
+                  <CodeBlock code={commands.envPatch} />
+                  <p style={{ fontSize: 12, color: C.dim, margin: '12px 0 8px' }}>
+                    2) 레포 디렉토리에서 Hook 설치
+                  </p>
+                  <CodeBlock code={commands.installHook} />
+                  <p style={{ fontSize: 11, color: C.dim, marginTop: 8 }}>
+                    이 방식은 레포 등록이 자동으로 되지 않습니다. "연결 설정" 탭에서 수동 등록이
+                    필요합니다.
                   </p>
                 </div>
-              ) : (
-                <div style={{ fontSize: 12, color: C.dim, marginBottom: 16, fontStyle: 'italic' }}>
-                  아직 등록된 레포 없음. 건너뛰어도 됩니다 (나중에 "연결 설정" 탭에서 추가 가능).
-                </div>
               )}
-
-              <div style={{ marginTop: 12, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8 }}>
-                  Hook 설치 명령어
-                </div>
-                <p style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.6 }}>
-                  각 레포 디렉토리에서 아래 명령어를 한 번씩 실행하세요. Hook 스크립트와 설정이
-                  자동으로 깔립니다.
-                </p>
-                <CodeBlock code={commands.installHook} />
-              </div>
             </StepBody>
           )}
 
-          {step === 5 && (
+          {step === 4 && (
             <StepBody title="연결 확인">
               {detected ? (
                 <div
@@ -532,8 +404,8 @@ export function OnboardingWizard({
               ) : (
                 <>
                   <p style={{ fontSize: 13, color: C.dim, marginBottom: 16, lineHeight: 1.6 }}>
-                    방금 등록한 레포에서 Claude Code를 한 번 사용해보세요. 첫 Hook 데이터가
-                    도착하면 자동으로 감지합니다.
+                    이전 단계의 설치 명령이 정상 종료되었다면 곧 자동 감지됩니다. 통합
+                    스크립트는 마지막에 테스트 ping을 전송하므로 보통 즉시 도착합니다.
                   </p>
                   <div
                     style={{
@@ -560,7 +432,7 @@ export function OnboardingWizard({
                     </div>
                     <div style={{ fontSize: 11, color: C.dim }}>경과: {elapsedSec}초</div>
                   </div>
-                  {elapsedSec >= 300 && (
+                  {elapsedSec >= 120 && (
                     <div
                       style={{
                         marginTop: 16,
@@ -573,14 +445,12 @@ export function OnboardingWizard({
                         lineHeight: 1.6,
                       }}
                     >
-                      <strong>5분이 지났습니다.</strong> 다음을 확인해보세요:
+                      <strong>2분이 지났습니다.</strong> 다음을 확인해보세요:
                       <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
-                        <li>Step 3의 명령어를 실제로 터미널에서 실행했나요?</li>
-                        <li>Step 4의 Hook 설치 명령어를 본인 레포 디렉토리에서 실행했나요?</li>
-                        <li>
-                          <code>~/.claude/.env</code>에 3개 변수가 모두 들어있나요?
-                        </li>
-                        <li>해당 레포에서 Claude Code를 새로 열고 한 번 사용해보셨나요?</li>
+                        <li>Step 3의 명령어를 본인 레포 디렉토리에서 실제로 실행했나요?</li>
+                        <li>스크립트가 "[4/4] 연결 테스트" 단계까지 완료했나요?</li>
+                        <li>방화벽/프록시가 대시보드 호스트를 차단하지 않나요?</li>
+                        <li>API 키가 만료/재발급된 상태는 아닌가요?</li>
                       </ul>
                     </div>
                   )}
@@ -619,40 +489,22 @@ export function OnboardingWizard({
             ← 이전
           </button>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            {skipAvailable && (
-              <button
-                onClick={() => setStep(5)}
-                style={{
-                  background: 'transparent',
-                  border: `1px solid ${C.border}`,
-                  color: C.dim,
-                  borderRadius: 6,
-                  padding: '8px 14px',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                건너뛰기
-              </button>
-            )}
-            <button
-              onClick={goNext}
-              disabled={!canGoNext()}
-              style={{
-                background: canGoNext() ? C.accent : C.surfaceAlt,
-                color: canGoNext() ? '#fff' : C.dim,
-                border: 'none',
-                borderRadius: 6,
-                padding: '8px 18px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: canGoNext() ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {isLastStep ? '대시보드로 이동' : '다음 →'}
-            </button>
-          </div>
+          <button
+            onClick={goNext}
+            disabled={!canGoNext()}
+            style={{
+              background: canGoNext() ? C.accent : C.surfaceAlt,
+              color: canGoNext() ? '#fff' : C.dim,
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: canGoNext() ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {isLastStep ? '대시보드로 이동' : '다음 →'}
+          </button>
         </div>
       </div>
     </div>
