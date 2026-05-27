@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { C } from './constants/colors';
+import { applyDensityVars, loadDensity, saveDensity, type Density } from './constants/design';
 import { TopBar } from './components/TopBar';
 import { TabBar } from './components/TabBar';
 import { ChatBot } from './components/ChatBot';
@@ -30,6 +31,13 @@ export default function App() {
   const [needsAuth, setNeedsAuth] = useState<boolean | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardApiKey, setWizardApiKey] = useState<string | null>(null);
+  const [density, setDensity] = useState<Density>(() => loadDensity());
+
+  // 페이지 진입 + 변경 시 CSS 변수 갱신
+  useEffect(() => {
+    applyDensityVars(density);
+    saveDensity(density);
+  }, [density]);
 
   // 서버 운영 모드 확인 — saas 모드면 인증 필요 (공개 엔드포인트)
   useEffect(() => {
@@ -113,10 +121,16 @@ export default function App() {
         button { font-family: inherit; }
       `}</style>
 
-      <TopBar activeProject={activeProject} onLogout={needsAuth ? logout : undefined} email={auth.email} />
+      <TopBar
+        activeProject={activeProject}
+        onLogout={needsAuth ? logout : undefined}
+        email={auth.email}
+        density={density}
+        onDensityChange={setDensity}
+      />
       <TabBar tab={tab} setTab={setTab} />
 
-      <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ padding: 'var(--s-lg, 16px)', maxWidth: 1400, margin: "0 auto" }}>
         {tab === "repo-map" && <RepoMap activeProject={activeProject} />}
         {tab === "swap" && <ProjectSwap activeProject={activeProject} setActiveProject={setActiveProject} />}
         {tab === "main" && <SystemStatus activeProject={activeProject} />}

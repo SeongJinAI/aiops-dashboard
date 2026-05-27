@@ -2,7 +2,31 @@ import { useState } from 'react';
 import { C } from '../constants/colors';
 import { REPOS, CONNECTIONS } from '../constants/repos';
 import { Box } from '../components/shared/Box';
+import { useApi } from '../hooks/useApi';
 import type { Project, RepoConnection } from '../types';
+
+interface ProjectStructure {
+  repoPath: string;
+  exists: boolean;
+  saasMode?: boolean;
+  message?: string;
+  claude?: {
+    exists: boolean;
+    rules?: number;
+    agents?: number;
+    hooks?: number;
+    skills?: number;
+    hasSettings?: boolean;
+  };
+  aiops?: {
+    exists: boolean;
+    categories: { name: string; fileCount: number }[];
+  };
+  code?: { name: string; fileCount: number }[];
+  docs?: { name: string; fileCount: number }[];
+  tests?: { name: string; fileCount: number }[];
+  rootMd?: number;
+}
 
 interface RepoMapProps {
   activeProject: Project;
@@ -14,6 +38,7 @@ const NODE_H = 70;
 export function RepoMap({ activeProject }: RepoMapProps) {
   const [hoveredConn, setHoveredConn] = useState<RepoConnection | null>(null);
   const [hoveredRepo, setHoveredRepo] = useState<string | null>(null);
+  const { data: structure } = useApi<ProjectStructure>('/projects/structure', { repoPath: '', exists: false });
 
   const pos: Record<string, { x: number; y: number }> = {
     governance: { x: 300, y: 30 },
@@ -113,7 +138,9 @@ export function RepoMap({ activeProject }: RepoMapProps) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <ActiveProjectStructure structure={structure} projectName={activeProject.name} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }} key="permission-row">
         <Box title="권한 매트릭스">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead><tr><td style={{ padding: 6, color: C.dim }}>from → to</td>{["프로젝트", "지식", "테스트"].map(h => <td key={h} style={{ padding: 6, color: C.dim, textAlign: "center" }}>{h}</td>)}</tr></thead>
@@ -136,5 +163,112 @@ export function RepoMap({ activeProject }: RepoMapProps) {
         </Box>
       </div>
     </div>
+  );
+}
+
+
+function ActiveProjectStructure({
+  structure,
+  projectName,
+}: { structure: ProjectStructure; projectName: string }) {
+  if (!structure) return null;
+
+  if (structure.saasMode) {
+    return (
+      <Box title={`활성 프로젝트 구조 — ${projectName}`}>
+        <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.6 }}>
+          {structure.message || 'SaaS 모드에서는 사용자 로컬 디렉토리를 서버가 직접 스캔할 수 없습니다.'}
+          <br />
+          repoPath: <code style={{ color: C.text, fontFamily: 'monospace' }}>
+            {structure.repoPath || '(미설정)'}
+          </code>
+        </div>
+      </Box>
+    );
+  }
+
+  if (!structure.exists) {
+    return (
+      <Box title={`활성 프로젝트 구조 — ${projectName}`}>
+        <div style={{ fontSize: 12, color: C.dim, textAlign: 'center', padding: 16 }}>
+          repoPath가 존재하지 않습니다 — "프로젝트 교체" 탭에서 경로를 등록하세요.
+        </div>
+      </Box>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <Box title=".claude/ — Claude Code 설정">
+        {structure.claude?.exists ? (
+          <div style={{ fontSize: 12, color: C.text, lineHeight: 1.8 }}>
+            <StructRow k="rules (규칙)" v={structure.claude.rules ?? 0} color={C.purple} />
+            <StructRow k="agents (서브에이전트)" v={structure.claude.agents ?? 0} color={C.cyan} />
+            <StructRow k="hooks (스크립트)" v={structure.claude.hooks ?? 0} color={C.green} />
+            <StructRow k="skills (스킬)" v={structure.claude.skills ?? 0} color={C.orange} />
+            <StructRow k="settings.json" v={structure.claude.hasSettings ? '✓' : '–'} color={structure.claude.hasSettings ? C.green : C.dim} />
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: C.dim, textAlign: 'center', padding: 12 }}>
+            .claude/ 디렉토리 없음
+          </div>
+        )}
+      </Box>
+
+      <Box title=".aiops/ — Track 수집 데이터">
+        {structure.aiops?.exists && structure.aiops.categories.length > 0 ? (
+          <div style={{ fontSize: 12, color: C.text, lineHeight: 1.8 }}>
+            {structure.aiops.categories.map((c) => (
+              <StructRow key={c.name} k={c.name} v={`${c.fileCount}일치`} color={C.cyan} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: C.dim, textAlign: 'center', padding: 12 }}>
+            .aiops/ 디렉토리 없음 — install.sh 실행 후 첫 Hook 발생 시 자동 생성
+          </div>
+        )}
+      </Box>
+
+      <Box title="코드 / 문서 / 테스트">
+        <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>코드 디렉토리</div>
+        {(structure.code || []).map((c) => (
+          <StructRow key={c.name} k={c.name} v={`${c.fileCount}개`} color={C.green} />
+        ))}
+        {(!structure.code || structure.code.length === 0) && <StructEmpty />}
+
+        <div style={{ fontSize: 11, color: C.dim, marginTop: 8, marginBottom: 4 }}>문서</div>
+        {(structure.docs || []).map((d) => (
+          <StructRow key={d.name} k={d.name} v={`${d.fileCount}.md`} color={C.orange} />
+        ))}
+        {structure.rootMd !== undefined && structure.rootMd > 0 && (
+          <StructRow k="루트 *.md" v={`${structure.rootMd}개`} color={C.orange} />
+        )}
+        {(!structure.docs || structure.docs.length === 0) && (structure.rootMd ?? 0) === 0 && <StructEmpty />}
+
+        {(structure.tests || []).length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 8, marginBottom: 4 }}>테스트</div>
+            {(structure.tests || []).map((t) => (
+              <StructRow key={t.name} k={t.name} v={`${t.fileCount}개`} color={C.cyan} />
+            ))}
+          </>
+        )}
+      </Box>
+    </div>
+  );
+}
+
+function StructRow({ k, v, color }: { k: string; v: number | string; color: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+      <span style={{ color: C.dim, fontSize: 11 }}>{k}</span>
+      <span style={{ color, fontWeight: 600, fontSize: 12, fontFamily: 'monospace' }}>{v}</span>
+    </div>
+  );
+}
+
+function StructEmpty() {
+  return (
+    <div style={{ fontSize: 11, color: C.dim, fontStyle: 'italic' }}>(없음)</div>
   );
 }

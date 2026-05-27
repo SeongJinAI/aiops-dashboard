@@ -35,6 +35,31 @@ async def active_project(user: dict = Depends(get_current_user)):
     return {"error": "No active project"}
 
 
+@router.get("/structure")
+async def project_structure(user: dict = Depends(get_current_user)):
+    """활성 프로젝트의 실제 디렉토리/파일 통계 — RepoMap의 동적 표시용.
+
+    saas 모드: 서버에서 사용자 로컬 파일 접근 불가 — 빈 결과 반환.
+    local 모드: get_active_project()에서 repoPath 가져와 스캔.
+    """
+    from services.project_structure import scan_project_structure
+
+    if AIOPS_MODE == "saas":
+        # SaaS 모드: 활성 프로젝트의 repoPath는 사용자 로컬 경로이므로 서버에서 스캔 불가
+        project = await get_active_project_async(tenant_id=user["tenant_id"])
+        return {
+            "repoPath": (project or {}).get("repoPath", ""),
+            "exists": False,
+            "saasMode": True,
+            "message": "SaaS 모드에서는 사용자 로컬 디렉토리 구조를 서버가 직접 스캔할 수 없습니다. "
+                       "Hermes 자산 카탈로그(에이전트 탭)에서 .md 자산 분류를 확인하세요.",
+        }
+
+    project = get_active_project()
+    repo_path = (project or {}).get("repoPath", "")
+    return scan_project_structure(repo_path)
+
+
 @router.post("/swap")
 async def swap(req: SwapRequest, user: dict = Depends(get_current_user)):
     if AIOPS_MODE == "saas":

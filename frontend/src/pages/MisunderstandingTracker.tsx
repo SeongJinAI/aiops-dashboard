@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { C } from '../constants/colors';
+import { T } from '../constants/design';
 import { Box } from '../components/shared/Box';
+import { StatCard, StatGrid } from '../components/shared/StatCard';
 import { useApi } from '../hooks/useApi';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -56,17 +58,14 @@ export function MisunderstandingTracker() {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 'var(--s-md, 10px)' }}>
+      <StatGrid columns={4}>
         {statCards.map((m, i) => (
-          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: m.c }}>{m.v}</div>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>{m.l}</div>
-          </div>
+          <StatCard key={i} label={m.l} value={m.v} color={m.c} />
         ))}
-      </div>
+      </StatGrid>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 'var(--s-sm, 8px)' }}>
         <Box title="오해 감지 로그">
           {allLogs.length === 0 ? (
             <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>오해 감지 데이터가 없습니다</div>
@@ -95,7 +94,7 @@ export function MisunderstandingTracker() {
           )}
         </Box>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 'var(--s-sm, 8px)' }}>
           <Box title="패턴별 분포">
             {stats.byPattern.length === 0 ? (
               <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>데이터 없음</div>

@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { C } from '../constants/colors';
+import { T } from '../constants/design';
 import { Box } from '../components/shared/Box';
+import { StatCard, StatGrid } from '../components/shared/StatCard';
 import { useApi } from '../hooks/useApi';
 import { useWebSocket } from '../hooks/useWebSocket';
 import type { HookLog } from '../types';
@@ -43,31 +45,28 @@ export function HookMonitor() {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 'var(--s-md, 10px)' }}>
+      <StatGrid columns={4}>
         {stats.map((m, i) => (
-          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: m.c }}>{m.v}</div>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>{m.l}</div>
-          </div>
+          <StatCard key={i} label={m.l} value={m.v} color={m.c} />
         ))}
-      </div>
+      </StatGrid>
       <Box title="실시간 Hook 로그">
         {logs.length === 0 ? (
-          <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>로그 데이터가 없습니다</div>
+          <div style={{ padding: 'var(--s-md, 10px)', textAlign: "center", fontSize: T.sm, color: C.dim }}>로그 데이터가 없습니다</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{["시각", "Hook", "스크립트", "상태", "소요", "레포"].map(h => <td key={h} style={{ padding: "8px 10px", fontSize: 11, color: C.dim, fontWeight: 500 }}>{h}</td>)}</tr></thead>
+            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{["시각", "Hook", "스크립트", "상태", "소요", "레포"].map(h => <td key={h} style={{ padding: "4px 6px", fontSize: T.xs, color: C.dim, fontWeight: 500 }}>{h}</td>)}</tr></thead>
             <tbody>{logs.map((l, i) => {
               const time = new Date(l.ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
               return (
                 <tr key={i} style={{ borderBottom: `1px solid ${C.surfaceAlt}` }}>
-                  <td style={{ padding: "8px 10px", fontSize: 12, color: C.dim }}>{time}</td>
-                  <td style={{ padding: "8px 10px", fontSize: 12, color: C.text }}>{l.hook}</td>
-                  <td style={{ padding: "8px 10px", fontSize: 12, color: C.dim }}>{l.script}</td>
-                  <td style={{ padding: "8px 10px" }}><span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: l.exit === 0 ? `${C.green}15` : `${C.red}15`, color: l.exit === 0 ? C.green : C.red, fontWeight: 500 }}>{l.exit === 0 ? "성공" : "실패 " + l.exit}</span></td>
-                  <td style={{ padding: "8px 10px", fontSize: 12, color: C.dim }}>{l.ms}ms</td>
-                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.dim }}>{l.repo}</td>
+                  <td style={{ padding: "4px 6px", fontSize: T.sm, color: C.dim }}>{time}</td>
+                  <td style={{ padding: "4px 6px", fontSize: T.sm, color: C.text }}>{l.hook}</td>
+                  <td style={{ padding: "4px 6px", fontSize: T.sm, color: C.dim }}>{l.script}</td>
+                  <td style={{ padding: "4px 6px" }}><span style={{ fontSize: T.xs, padding: "1px 6px", borderRadius: 3, background: l.exit === 0 ? `${C.green}15` : `${C.red}15`, color: l.exit === 0 ? C.green : C.red, fontWeight: 500 }}>{l.exit === 0 ? "성공" : "실패 " + l.exit}</span></td>
+                  <td style={{ padding: "4px 6px", fontSize: T.sm, color: C.dim }}>{l.ms}ms</td>
+                  <td style={{ padding: "4px 6px", fontSize: T.xs, color: C.dim }}>{l.repo}</td>
                 </tr>
               );
             })}</tbody>

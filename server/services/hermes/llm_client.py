@@ -1,80 +1,50 @@
 """
-Hermes — Claude API 클라이언트 래퍼 (BYOK 우선).
+Hermes의 LLM 호출 facade.
 
-키 로드 순서:
-  1. tenant_secrets DB (BYOK) — tenant_id가 주어졌을 때
-  2. 환경변수 ANTHROPIC_API_KEY
-  3. ~/.claude/.env
-
-운영(SaaS)에서는 1번만 사용. 2/3은 개발자 본인 머신용 폴백.
+이전에는 Anthropic 전용이었으나 services.llm 추상 레이어 도입 이후 모든 provider로 위임된다.
+하위 호환을 위해 같은 함수 시그니처(complete) 유지.
 """
-import os
-from pathlib import Path
-from anthropic import AsyncAnthropic
+from __future__ import annotations
+
+from typing import Awaitable, Callable
+
+from services.llm import LLMNotConfigured, ProviderName, get_provider
 
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_PROVIDER: ProviderName = "anthropic"
+DEFAULT_MODEL = "claude-sonnet-4-5"  # 하위 호환 (사용처에서 직접 참조)
 
-
-def _from_claude_env_file() -> str | None:
-    env_path = Path.home() / ".claude" / ".env"
-    if not env_path.exists():
-        return None
-    try:
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'") or None
-    except Exception:
-        return None
-    return None
-
-
-def load_anthropic_key(tenant_id: str | None = None) -> str | None:
-    """tenant_id 우선 → env → ~/.claude/.env 순으로 로드."""
-    if tenant_id:
-        try:
-            from services.secret_store import get_secret_plain
-            key = get_secret_plain(tenant_id, "anthropic")
-            if key:
-                return key
-        except Exception:
-            pass
-    env_key = os.getenv("ANTHROPIC_API_KEY")
-    if env_key:
-        return env_key.strip() or None
-    return _from_claude_env_file()
-
-
-class LLMNotConfigured(RuntimeError):
-    """ANTHROPIC_API_KEY가 설정되지 않은 경우."""
-
-
-def get_async_client(tenant_id: str | None = None) -> AsyncAnthropic:
-    """AsyncAnthropic 인스턴스를 반환. 키가 없으면 LLMNotConfigured raise."""
-    key = load_anthropic_key(tenant_id)
-    if not key:
-        raise LLMNotConfigured(
-            "Anthropic API 키가 설정되지 않았습니다. "
-            "대시보드의 '연결 설정 > Anthropic 키' 에서 본인 키를 등록하세요. "
-            "(https://console.anthropic.com/settings/keys 에서 발급)"
-        )
-    return AsyncAnthropic(api_key=key)
+OnRetryCallback = Callable[[int, int, str], Awaitable[None]]
 
 
 async def complete(
     prompt: str,
     system: str = "",
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
     max_tokens: int = 8000,
     tenant_id: str | None = None,
+    on_retry: OnRetryCallback | None = None,
+    provider: ProviderName | None = None,
 ) -> str:
-    """단일 프롬프트 호출. tenant_id가 주어지면 그 tenant의 키를 우선 사용."""
-    client = get_async_client(tenant_id)
-    messages = [{"role": "user", "content": prompt}]
-    kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
-    if system:
-        kwargs["system"] = system
-    response = await client.messages.create(**kwargs)
-    parts = [block.text for block in response.content if getattr(block, "type", None) == "text"]
-    return "".join(parts).strip()
+    """단일 프롬프트 호출. provider 미지정 시 anthropic 기본.
+
+    재시도 + on_retry 콜백은 각 provider 내부에서 처리.
+    """
+    p = get_provider(provider or DEFAULT_PROVIDER, tenant_id=tenant_id)
+    return await p.complete(
+        prompt=prompt,
+        system=system,
+        model=model,
+        max_tokens=max_tokens,
+        on_retry=on_retry,
+    )
+
+
+# 하위 호환 별칭
+def load_anthropic_key(tenant_id: str | None = None) -> str | None:
+    """[Deprecated] Anthropic 키만 로드. 일반화된 services.llm 추천."""
+    p = get_provider("anthropic", tenant_id=tenant_id)
+    return p.load_key()
+
+
+__all__ = ["complete", "LLMNotConfigured", "DEFAULT_MODEL", "load_anthropic_key"]

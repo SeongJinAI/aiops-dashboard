@@ -1,5 +1,116 @@
 # HANDOFF.md
 
+## 2026.05.27 — MVP 90% 마감 (발표 준비용)
+
+### 한 줄 요약
+
+> AI 모임 발표("AI 바이브코딩 데이터 개인화 관리")용 MVP 마무리 라운드. Hermes 안정성+버전관리, 프롬프트 시각화 차트, 오해 자동 감지, WebSocket 인증 보강, 레포맵 동적 구조 — 총 6개 작업 완료. +1078줄 / -106줄 (11개 파일).
+
+### 이번 세션 완료 작업
+
+**#7 Hermes LLM 재시도 + 진행 상태 세분화** ✅
+- `services/hermes/llm_client.py`: 429/500/503/529/Connection/Timeout 에러 시 Exponential Backoff (1s→4s→16s, 최대 3회). `on_retry` 콜백 인자.
+- `services/hermes/wiki_builder.py`: `progress_cb` 인자 전 함수에 전파. 부분 실패 허용 — 한 perspective 실패해도 나머지 진행.
+- `routers/hermes.py`: `_publish_progress`가 EventBus로 `hermes_progress` 이벤트 push. 단계별 진행률(5/15/20/45/50/75/80/95/100).
+- `pages/Agent.tsx`: WebSocket으로 `hermes_progress` 수신 → 진행률 바 + 단계명 실시간 표시. 폴링 보조(5초).
+
+**#8 Hermes Phase 4 — 버전 관리 + diff 자동 작성** ✅
+- `services/hermes/diff.py` 신설: 룰 기반 챕터 diff (헤딩 추가/제거, 글자수 변화, 한국어 한 줄 요약). LLM 호출 없음.
+- `routers/hermes.py`: 위키 저장 시 이전 버전 가져와 자동 diff 계산. `status='partial_success'` 분기.
+- 신규 라우트: `GET /api/hermes/wiki/versions?perspective=X` (전체 히스토리), `GET /api/hermes/wiki/version?perspective=X&version=N` (특정 버전 본문).
+- `pages/Agent.tsx`: HistoryList 컴포넌트 추가. 버전별 diff 요약 + 클릭으로 이전 버전 본문 비교 가능.
+
+**#9 프롬프트 분석 시각화 강화** ✅
+- `services/db.py` + `services/log_reader.py`: `compute_prompt_stats`에 `hourly`(24시간 분포), `daily`(30일 추세), `lengthBuckets`(토큰 길이 5단계) 필드 추가.
+- `pages/PromptHistory.tsx` 전면 개편: 일별 추세 SVG line chart, 시간대별 막대, 길이 분포 막대, 피크 인사이트 박스. 외부 차트 라이브러리 없이 SVG 직접.
+
+**#10 오해 추적 자동 감지/분류 백엔드** ✅
+- `services/misunderstanding_detector.py` 신설: 룰 기반 패턴 감지 (rejection / correction / retry). 한국어+영어 키워드.
+- `detect_from_prompt`: 직전 사용자 prompt(10분 윈도우 내) 컨텍스트와 함께 분류.
+- `detect_from_hook`: Hook exit≠0(거버넌스 차단)을 rejection으로 자동 기록.
+- `routers/ingest.py`: prompts/hooks ingest 후 `_maybe_record_misunderstanding`이 자동으로 `misunderstandings` 카테고리에 자동 ingest + EventBus publish.
+
+**#11 Hook 모니터 다중 테넌트 안정성** ✅
+- `main.py` WebSocket 보안 구멍 차단: `?tenant_id=xxx` 폴백으로 인증 우회 가능했던 부분 제거.
+- saas 모드에서 JWT 없거나 검증 실패 시 1008(Policy Violation)로 즉시 close. accept 전 검증.
+- EventBus 자체는 이미 tenant 격리 되어있음 (수정 불요).
+
+**#12 레포맵 동적 반영** ✅
+- `services/project_structure.py` 신설: 활성 프로젝트의 `.claude/`, `.aiops/`, `code/docs/tests` 디렉토리 동적 스캔.
+- 신규 라우트: `GET /api/projects/structure`. saas 모드는 사용자 로컬 접근 불가하므로 안내 메시지만.
+- `pages/RepoMap.tsx`: `ActiveProjectStructure` 컴포넌트 추가. 3-column 박스로 .claude/.aiops/code-docs 통계 표시.
+
+### 검증
+
+- Python syntax: 9개 변경/신규 파일 모두 OK
+- TypeScript: `tsc --noEmit` 클린
+- diff 모듈 단위 테스트: 최초 생성/섹션 추가/제거 케이스 모두 정상
+- 패턴 분류기 테스트: 한국어/영어 7개 케이스 정상 분류
+- project_structure 실측: aiops-dashboard 자체 스캔 → .claude/rules 2개, server 82파일, frontend 6949파일, 루트 .md 7개
+- 백엔드 재시작 + WebSocket JWT 인증 동작 확인
+
+### 발표용 데모 시나리오 (제안)
+
+**Track**:
+1. PromptHistory 탭 → 일별 추세 line + 시간대 막대 + 피크 인사이트
+2. HookMonitor 탭 → 실시간 Hook 로그 (성공/실패 표시)
+3. RepoMap 탭 → .claude/.aiops 카운트 실측 시각화
+
+**Wikify**:
+4. Agent 탭 → [Hermes 업데이트] 클릭 → 단계별 progress bar (catalog→planner→developer→user) 실시간 표시
+5. 완료 후 위키 본문 + [버전 히스토리] 클릭 → v1→v2 diff 요약 확인
+
+**Coach (예고)**:
+6. MisunderstandingTracker 탭 → "다시", "아니" 등 자동 감지된 오해 사례 → "이런 패턴을 알기에 다음 프롬프트에서 어떻게 개선 제안할지" 미래 비전
+
+### 다음 세션이 즉시 해야 할 것
+
+1. 서버 살아있는지 확인 — 백엔드는 `bsgujngxr` 백그라운드로 실행 중. 죽었으면 재시작:
+   ```bash
+   cd /mnt/c/Personal/aiops-dashboard/server && uvicorn main:app --host 0.0.0.0 --port 8000 &
+   ```
+2. 사용자가 발표 자료 준비 도움 요청 시:
+   - 슬라이드 골격 (Track/Wikify/Coach 3단계)
+   - 데모 시나리오 단계별 스크립트
+   - 약점 솔직히 인정 + "building in public" 포지셔닝
+3. 발표 후 우선순위 백로그:
+   - 결제 인프라 (Lemon Squeezy + 티어)
+   - 클라이언트 사이드 시크릿 마스킹
+   - PostgreSQL 전환
+   - Tailwind+Shadcn 디자인 시스템
+
+### 주의사항
+
+- **백엔드 재시작 후 WebSocket 인증 변경 사항**: query_params에 `?tenant_id=xxx`만 주고 토큰 없이 연결하면 즉시 disconnect됨. 프론트엔드 `useWebSocket.ts`는 이미 token을 항상 보내므로 영향 없음.
+- **오해 자동 감지 노이즈 가능성**: "다시 해줘"가 흔하므로 모임 데모 전에 misunderstandings 테이블 검토 권장. 노이즈가 너무 많으면 `misunderstanding_detector.py`의 패턴 정밀도를 높여야 함.
+- **버전 히스토리 UI**: Agent 탭에서 [버전 히스토리] 버튼은 wiki가 1번 이상 생성된 후에만 보임.
+- **RepoMap 동적 구조**: saas 모드면 메시지만 표시 (로컬 파일 접근 불가). local 모드에서 데모하면 더 보기 좋음.
+- 이전 세션 주의사항(Vite hot reload, --reload 미사용, JWT/MASTER_KEY dev 값, install.sh 보안 모델) 그대로 유효.
+
+### 관련 파일 (신규/수정)
+
+**신규**:
+- `server/services/hermes/diff.py`
+- `server/services/misunderstanding_detector.py`
+- `server/services/project_structure.py`
+
+**수정 (백엔드)**:
+- `server/main.py` (WebSocket 인증 강화)
+- `server/routers/hermes.py` (진행 push + 버전 라우트)
+- `server/routers/ingest.py` (오해 자동 감지)
+- `server/routers/projects.py` (structure 라우트)
+- `server/services/db.py` (시간대/일별/길이 분포)
+- `server/services/log_reader.py` (local 모드 동일 통계)
+- `server/services/hermes/llm_client.py` (재시도)
+- `server/services/hermes/wiki_builder.py` (progress_cb)
+
+**수정 (프론트엔드)**:
+- `frontend/src/pages/Agent.tsx` (진행률, 히스토리)
+- `frontend/src/pages/PromptHistory.tsx` (차트)
+- `frontend/src/pages/RepoMap.tsx` (동적 구조)
+
+---
+
 ## 2026.05.26 — SaaS 상용화 진단 + 원클릭 install 통합
 
 ### 한 줄 요약

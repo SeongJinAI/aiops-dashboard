@@ -1,6 +1,8 @@
 import { C } from '../constants/colors';
+import { R, T } from '../constants/design';
 import { REPOS } from '../constants/repos';
 import { Box } from '../components/shared/Box';
+import { StatCard, StatGrid } from '../components/shared/StatCard';
 import { useApi } from '../hooks/useApi';
 import type { Project, HealthData, GitStats, DocsData, TestData, PromptStats } from '../types';
 
@@ -52,41 +54,45 @@ export function SystemStatus({ activeProject }: SystemStatusProps) {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 'var(--s-md, 10px)' }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 'var(--s-sm, 6px)' }}>
         {REPOS.map(r => (
-          <div key={r.id} style={{ background: C.surface, border: `1px solid ${r.id === "project" ? C.green + "60" : C.border}`, borderRadius: 8, padding: 14, textAlign: "center" }}>
+          <div key={r.id} style={{
+            background: C.surface,
+            border: `1px solid ${r.id === "project" ? C.green + "60" : C.border}`,
+            borderRadius: R.md,
+            padding: 'var(--s-sm, 8px)',
+            textAlign: "center",
+          }}>
             <div style={{
-              width: 32, height: 32, borderRadius: "50%", margin: "0 auto 8px",
+              width: 24, height: 24, borderRadius: "50%", margin: "0 auto 4px",
               background: `${r.color}15`, color: r.color,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: 700,
+              fontSize: T.body, fontWeight: 700,
             }}>{r.icon}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{r.name}</div>
-            <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{r.id === "project" ? activeProject.name : repoStatus[r.id]}</div>
+            <div style={{ fontSize: T.body, fontWeight: 600, color: C.text }}>{r.name}</div>
+            <div style={{ fontSize: T.xs, color: C.dim, marginTop: 2 }}>
+              {r.id === "project" ? activeProject.name : repoStatus[r.id]}
+            </div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+      <StatGrid columns={5}>
         {summaryCards.map((m, i) => (
-          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: m.c }}>{m.v}</div>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{m.l}</div>
-            <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{m.sub}</div>
-          </div>
+          <StatCard key={i} label={m.l} value={m.v} color={m.c} sub={m.sub} />
         ))}
-      </div>
+      </StatGrid>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 'var(--s-sm, 8px)' }}>
         <Box title="최근 Hook 활동">
           {recentActivity.length === 0 ? (
-            <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>활동 기록이 없습니다</div>
+            <Empty msg="활동 기록이 없습니다" />
           ) : (
             recentActivity.map((e, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, padding: "6px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
-                <span style={{ fontSize: 11, color: C.dim, minWidth: 40 }}>{e.t}</span>
-                <span style={{ fontSize: 11, color: e.ok ? C.dim : C.orange }}>{e.msg}</span>
+              <div key={i} style={{ display: "flex", gap: 6, padding: "3px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
+                <span style={{ fontSize: T.sm, color: C.dim, minWidth: 36 }}>{e.t}</span>
+                <span style={{ fontSize: T.sm, color: e.ok ? C.dim : C.orange }}>{e.msg}</span>
               </div>
             ))
           )}
@@ -94,12 +100,12 @@ export function SystemStatus({ activeProject }: SystemStatusProps) {
 
         <Box title="변경 빈도 Top 파일 (30일)">
           {gitStats.hotspots.length === 0 ? (
-            <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>데이터 없음</div>
+            <Empty msg="데이터 없음" />
           ) : (
             gitStats.hotspots.slice(0, 8).map((h, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
-                <span style={{ fontSize: 11, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>{h.file}</span>
-                <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>{h.changes}</span>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
+                <span style={{ fontSize: T.sm, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>{h.file}</span>
+                <span style={{ fontSize: T.sm, color: C.green, fontWeight: 600 }}>{h.changes}</span>
               </div>
             ))
           )}
@@ -107,17 +113,23 @@ export function SystemStatus({ activeProject }: SystemStatusProps) {
 
         <Box title="프롬프트 레포 분포">
           {promptStats.byRepo.length === 0 ? (
-            <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: C.dim }}>데이터 없음</div>
+            <Empty msg="데이터 없음" />
           ) : (
             promptStats.byRepo.map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
-                <span style={{ fontSize: 11, color: C.text }}>{r.repo}</span>
-                <span style={{ fontSize: 11, color: C.cyan, fontWeight: 600 }}>{r.cnt}회</span>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: `1px solid ${C.surfaceAlt}` }}>
+                <span style={{ fontSize: T.sm, color: C.text }}>{r.repo}</span>
+                <span style={{ fontSize: T.sm, color: C.cyan, fontWeight: 600 }}>{r.cnt}회</span>
               </div>
             ))
           )}
         </Box>
       </div>
     </div>
+  );
+}
+
+function Empty({ msg }: { msg: string }) {
+  return (
+    <div style={{ padding: 'var(--s-md, 10px)', textAlign: "center", fontSize: T.sm, color: C.dim }}>{msg}</div>
   );
 }

@@ -100,28 +100,20 @@ app.include_router(secrets_router.router, prefix="/api/secrets")
 
 @app.websocket("/ws/logs")
 async def websocket_logs(ws: WebSocket):
-    await ws.accept()
-
-    if AIOPS_MODE == "local":
-        # Local 모드: 기존 watchfiles 기반 (connected_clients로 broadcast)
-        connected_clients.append(ws)
-        try:
-            while True:
-                await ws.receive_text()
-        except WebSocketDisconnect:
-            connected_clients.remove(ws)
-    else:
-        # SaaS 모드: EventBus 구독 (tenant별 격리)
+    if AIOPS_MODE == "saas":
+        # SaaS 모드: JWT 필수. 토큰 없거나 검증 실패 시 즉시 close (정책 위반 1008).
+        # query_params 의 tenant_id 폴백은 인증 우회 위험이 있어 제거됨.
+        from services.auth import verify_jwt
         from services.event_bus import event_bus
 
-        # JWT에서 tenant_id 추출 (쿼리 파라미터 token 또는 tenant_id 폴백)
-        from services.auth import verify_jwt
         token = ws.query_params.get("token", "")
-        if token:
-            jwt_payload = verify_jwt(token)
-            tenant_id = jwt_payload["tenant_id"] if jwt_payload else "local"
-        else:
-            tenant_id = ws.query_params.get("tenant_id", "local")
+        jwt_payload = verify_jwt(token) if token else None
+        if not jwt_payload or not jwt_payload.get("tenant_id"):
+            await ws.close(code=1008, reason="Unauthorized — JWT 토큰이 필요합니다")
+            return
+
+        tenant_id = jwt_payload["tenant_id"]
+        await ws.accept()
         queue = await event_bus.subscribe(tenant_id)
         try:
             while True:
@@ -131,3 +123,14 @@ async def websocket_logs(ws: WebSocket):
             pass
         finally:
             event_bus.unsubscribe(tenant_id, queue)
+        return
+
+    # Local 모드: 단일 사용자라 broadcast로 충분 (watchfiles 기반)
+    await ws.accept()
+    connected_clients.append(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        if ws in connected_clients:
+            connected_clients.remove(ws)

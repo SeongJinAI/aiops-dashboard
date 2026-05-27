@@ -4,11 +4,36 @@
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 from services.auth import verify_api_key, verify_api_key_db
-from services.db import insert_log, insert_logs_batch
+from services.db import insert_log, insert_logs_batch, DB_PATH
 from services.secret_masker import mask_payload
 from services.rate_limit import limiter
+from services.misunderstanding_detector import detect_from_prompt, detect_from_hook
 
 router = APIRouter()
+
+
+async def _maybe_record_misunderstanding(tenant_id: str, category: str, payload: dict) -> None:
+    """prompts/hooks 카테고리는 오해 감지 후 misunderstandings로 자동 기록.
+
+    실패해도 ingest 자체는 영향 없도록 모든 예외를 삼킨다.
+    """
+    try:
+        detected: dict | None = None
+        if category == "prompts":
+            detected = await detect_from_prompt(tenant_id, payload, str(DB_PATH))
+        elif category == "hooks":
+            detected = await detect_from_hook(tenant_id, payload, str(DB_PATH))
+        if not detected:
+            return
+        await insert_log(tenant_id, "misunderstandings", detected)
+        try:
+            from services.event_bus import event_bus
+            await event_bus.publish(tenant_id, "misunderstandings", detected)
+        except Exception:
+            pass
+    except Exception:
+        # 감지 실패는 노이즈 — 본 ingest를 막지 않는다
+        pass
 
 
 class IngestRequest(BaseModel):
@@ -52,6 +77,9 @@ async def ingest_log(request: Request, req: IngestRequest, x_api_key: str = Head
     except (ImportError, AttributeError):
         pass
 
+    # 오해 자동 감지 (prompts/hooks만)
+    await _maybe_record_misunderstanding(tenant_id, req.category, safe_payload)
+
     return {"status": "ok", "count": 1, "masked": found}
 
 
@@ -78,5 +106,9 @@ async def ingest_batch(request: Request, req: IngestBatchRequest, x_api_key: str
             await event_bus.publish(tenant_id, log["category"], log["payload"])
     except (ImportError, AttributeError):
         pass
+
+    # 오해 자동 감지 (prompts/hooks만)
+    for log in safe_logs:
+        await _maybe_record_misunderstanding(tenant_id, log["category"], log["payload"])
 
     return {"status": "ok", "count": len(safe_logs), "masked": sorted(all_masked)}

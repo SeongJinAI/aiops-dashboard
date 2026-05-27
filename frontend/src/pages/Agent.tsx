@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { C } from '../constants/colors';
 import { apiPost, useApi } from '../hooks/useApi';
 import { getToken } from '../hooks/useAuth';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 interface AssetEntry {
   path: string;
@@ -37,14 +38,31 @@ interface WikiLatest {
 
 interface RunStatus {
   id: number;
-  status: 'running' | 'success' | 'failed';
+  status: 'running' | 'success' | 'partial_success' | 'failed';
   started_at?: string;
   finished_at?: string;
   input_count?: number;
   output_chars?: number;
   error?: string;
   diff_summary?: string;
+  // 실시간 진행 (WebSocket으로 갱신)
+  stage?: string;
+  message?: string;
+  progress?: number;
+  provider?: string;
 }
+
+interface SecretStatusEntry {
+  kind: 'anthropic' | 'openai' | 'gemini';
+  has_key: boolean;
+  preview: string | null;
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic Claude',
+  openai: 'OpenAI GPT',
+  gemini: 'Google Gemini',
+};
 
 const PERSPECTIVE_LABEL: Record<string, string> = {
   planner: '기획자',
@@ -70,6 +88,19 @@ export function Agent() {
     { project: '', perspectives: {}, version: 0, updatedAt: null },
   );
 
+  // 등록된 provider 키 상태 (드롭다운 채우기)
+  const { data: secretStatus } = useApi<SecretStatusEntry[]>('/secrets', []);
+  const registeredProviders = secretStatus.filter((s) => s.has_key).map((s) => s.kind);
+  const [selectedProvider, setSelectedProvider] = useState<string>('anthropic');
+
+  // 등록된 첫 provider를 기본 선택
+  useEffect(() => {
+    if (registeredProviders.length === 0) return;
+    if (!registeredProviders.includes(selectedProvider as 'anthropic')) {
+      setSelectedProvider(registeredProviders[0]);
+    }
+  }, [registeredProviders.join(',')]);
+
   // run 폴링 상태
   const [activeRun, setActiveRun] = useState<RunStatus | null>(null);
 
@@ -88,17 +119,42 @@ export function Agent() {
 
   const triggerUpdate = async () => {
     setError(null);
+    if (registeredProviders.length === 0) {
+      setError('AI 프로바이더 키가 하나도 등록되지 않았습니다. "연결 설정" 탭에서 Anthropic/OpenAI/Gemini 중 하나를 등록하세요.');
+      return;
+    }
     try {
-      const res = await apiPost<{ run_id: number; status: string }>('/hermes/wiki/update', {});
-      setActiveRun({ id: res.run_id, status: 'running' });
+      const res = await apiPost<{ run_id: number; status: string; provider: string }>(
+        '/hermes/wiki/update',
+        { provider: selectedProvider },
+      );
+      setActiveRun({ id: res.run_id, status: 'running', provider: res.provider });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Hermes 업데이트 실패');
     }
   };
 
-  // run 폴링 (running 상태에서 3초 간격)
+  // WebSocket: 실시간 진행 push
+  const progressHandler = useCallback((data: Record<string, unknown>) => {
+    setActiveRun((prev) => {
+      if (!prev || prev.id !== (data.run_id as number)) return prev;
+      return {
+        ...prev,
+        stage: data.stage as string,
+        message: data.message as string,
+        progress: data.progress as number,
+      };
+    });
+    // complete/failed 시 최종 상태 재조회
+    if (data.stage === 'complete' || data.stage === 'failed') {
+      refetchWiki();
+    }
+  }, [refetchWiki]);
+  useWebSocket({ hermes_progress: progressHandler });
+
+  // run 폴링 (WebSocket 보조 — 최종 상태 확정용, 5초 간격)
   useEffect(() => {
-    if (!activeRun || activeRun.status !== 'running') return;
+    if (!activeRun || (activeRun.status !== 'running')) return;
     let cancelled = false;
     const token = getToken();
     const poll = async () => {
@@ -109,8 +165,8 @@ export function Agent() {
         });
         if (res.ok) {
           const data: RunStatus = await res.json();
-          setActiveRun(data);
-          if (data.status === 'success') {
+          setActiveRun((prev) => prev ? { ...prev, ...data } : data);
+          if (data.status === 'success' || data.status === 'partial_success') {
             refetchWiki();
             return;
           }
@@ -119,9 +175,9 @@ export function Agent() {
       } catch {
         /* ignore */
       }
-      if (!cancelled) setTimeout(poll, 3000);
+      if (!cancelled) setTimeout(poll, 5000);
     };
-    const t = setTimeout(poll, 3000);
+    const t = setTimeout(poll, 5000);
     return () => { cancelled = true; clearTimeout(t); };
   }, [activeRun, refetchWiki]);
 
@@ -129,14 +185,14 @@ export function Agent() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text }}>에이전트 (Hermes)</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--s-sm, 8px)' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text }}>에이전트 (Hermes)</h2>
         <span style={{ fontSize: 11, color: C.dim }}>
           프로젝트별 위키 자동 생성기
         </span>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 'var(--s-sm, 8px)' }}>
         {[
           { k: 'wiki', label: '위키' },
           { k: 'catalog', label: '자산 카탈로그' },
@@ -175,6 +231,9 @@ export function Agent() {
           wiki={wiki}
           activeRun={activeRun}
           onUpdate={triggerUpdate}
+          registeredProviders={registeredProviders}
+          selectedProvider={selectedProvider}
+          onSelectProvider={setSelectedProvider}
         />
       )}
 
@@ -190,20 +249,76 @@ export function Agent() {
   );
 }
 
+interface VersionEntry {
+  version: number;
+  updatedAt: string;
+  chars: number;
+  diffFromPrev: {
+    summary: string;
+    added: string[];
+    removed: string[];
+    char_delta: number;
+  };
+}
+
 function WikiPanel({
   wiki,
   activeRun,
   onUpdate,
+  registeredProviders,
+  selectedProvider,
+  onSelectProvider,
 }: {
   wiki: WikiLatest;
   activeRun: RunStatus | null;
   onUpdate: () => void;
+  registeredProviders: string[];
+  selectedProvider: string;
+  onSelectProvider: (p: string) => void;
 }) {
   const [selectedPersp, setSelectedPersp] = useState<'planner' | 'developer' | 'user'>('planner');
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<VersionEntry[]>([]);
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+  const [viewingContent, setViewingContent] = useState<string>('');
   const hasContent = wiki.version > 0;
   const isRunning = activeRun?.status === 'running';
 
   const current = wiki.perspectives[selectedPersp];
+
+  // 버전 히스토리 로드
+  useEffect(() => {
+    if (!showHistory || !hasContent) return;
+    const token = getToken();
+    fetch(`/api/hermes/wiki/versions?perspective=${selectedPersp}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: VersionEntry[]) => setHistory(data))
+      .catch(() => setHistory([]));
+  }, [showHistory, selectedPersp, hasContent, wiki.version]);
+
+  // perspective 바뀌면 특정 버전 보기 초기화
+  useEffect(() => {
+    setViewingVersion(null);
+    setViewingContent('');
+  }, [selectedPersp]);
+
+  const loadVersion = async (version: number) => {
+    const token = getToken();
+    const res = await fetch(
+      `/api/hermes/wiki/version?perspective=${selectedPersp}&version=${version}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      setViewingVersion(version);
+      setViewingContent(data.content);
+    }
+  };
+
+  const displayedContent = viewingVersion !== null ? viewingContent : (current?.content || '');
+  const displayedVersion = viewingVersion !== null ? viewingVersion : current?.version;
 
   return (
     <div>
@@ -237,13 +352,84 @@ function WikiPanel({
               );
             })}
           </div>
-          <button onClick={onUpdate} disabled={isRunning} style={btnPrimary(isRunning)}>
-            {isRunning ? '진행 중...' : (hasContent ? 'Hermes 다시 업데이트' : 'Hermes 업데이트')}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {hasContent && (
+              <button
+                onClick={() => setShowHistory((v) => !v)}
+                style={{
+                  background: showHistory ? C.surfaceAlt : 'transparent',
+                  color: C.text,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {showHistory ? '히스토리 닫기' : '버전 히스토리'}
+              </button>
+            )}
+
+            {registeredProviders.length > 0 ? (
+              <select
+                value={selectedProvider}
+                onChange={(e) => onSelectProvider(e.target.value)}
+                disabled={isRunning}
+                style={{
+                  background: C.surface,
+                  color: C.text,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                  fontSize: 12,
+                  fontFamily: 'inherit',
+                  cursor: isRunning ? 'not-allowed' : 'pointer',
+                }}
+                title="위키 생성에 사용할 AI 프로바이더"
+              >
+                {registeredProviders.map((p) => (
+                  <option key={p} value={p}>
+                    {PROVIDER_LABELS[p] || p}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{
+                fontSize: 11, color: C.orange,
+                padding: '8px 10px',
+                background: '#fffbeb',
+                border: `1px solid ${C.orange}`,
+                borderRadius: 6,
+              }}>
+                연결 설정에서 키 등록 필요
+              </span>
+            )}
+
+            <button onClick={onUpdate} disabled={isRunning || registeredProviders.length === 0} style={btnPrimary(isRunning || registeredProviders.length === 0)}>
+              {isRunning ? '진행 중...' : (hasContent ? 'Hermes 다시 업데이트' : 'Hermes 업데이트')}
+            </button>
+          </div>
         </div>
 
         {activeRun && (
           <RunStatusBox run={activeRun} />
+        )}
+
+        {showHistory && hasContent && (
+          <HistoryList
+            history={history}
+            currentVersion={current?.version ?? 0}
+            viewingVersion={viewingVersion}
+            onSelect={(v) => {
+              if (v === current?.version) {
+                setViewingVersion(null);
+                setViewingContent('');
+              } else {
+                loadVersion(v);
+              }
+            }}
+          />
         )}
 
         {!hasContent && !isRunning && (
@@ -270,12 +456,30 @@ function WikiPanel({
               fontSize: 11, color: C.dim, marginBottom: 12,
               display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
             }}>
-              <span>버전 {current.version}</span>
+              <span>버전 {displayedVersion ?? current.version}</span>
+              {viewingVersion !== null && viewingVersion !== current.version && (
+                <span style={{
+                  background: C.orange, color: '#fff',
+                  padding: '1px 6px', borderRadius: 3, fontSize: 10,
+                }}>이전 버전 보기</span>
+              )}
               <span>·</span>
               <span>업데이트: {current.updatedAt}</span>
+              {viewingVersion !== null && viewingVersion !== current.version && (
+                <button
+                  onClick={() => { setViewingVersion(null); setViewingContent(''); }}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: C.accent, fontSize: 11, cursor: 'pointer',
+                    padding: 0, textDecoration: 'underline',
+                  }}
+                >
+                  최신 버전으로 돌아가기
+                </button>
+              )}
             </div>
             <div style={markdownStyle}>
-              <ReactMarkdown>{current.content}</ReactMarkdown>
+              <ReactMarkdown>{displayedContent}</ReactMarkdown>
             </div>
           </div>
         )}
@@ -290,28 +494,146 @@ function WikiPanel({
   );
 }
 
+function HistoryList({
+  history,
+  currentVersion,
+  viewingVersion,
+  onSelect,
+}: {
+  history: VersionEntry[];
+  currentVersion: number;
+  viewingVersion: number | null;
+  onSelect: (version: number) => void;
+}) {
+  if (history.length === 0) {
+    return (
+      <div style={{
+        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+        padding: 16, marginBottom: 12, fontSize: 12, color: C.dim, textAlign: 'center',
+      }}>
+        히스토리를 불러오는 중...
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+      marginBottom: 12, overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '8px 14px', fontSize: 11, color: C.dim,
+        borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt,
+      }}>
+        버전 히스토리 — 총 {history.length}개 (최신 v{currentVersion})
+      </div>
+      {history.map((h) => {
+        const isLatest = h.version === currentVersion;
+        const isViewing = h.version === viewingVersion || (viewingVersion === null && isLatest);
+        return (
+          <button
+            key={h.version}
+            onClick={() => onSelect(h.version)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 14px', width: '100%', textAlign: 'left',
+              background: isViewing ? C.surfaceAlt : 'transparent',
+              border: 'none', borderBottom: `1px solid ${C.border}`,
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
+              color: C.text,
+            }}
+          >
+            <span style={{
+              background: isLatest ? C.green : C.border, color: '#fff',
+              padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 600,
+              minWidth: 32, textAlign: 'center',
+            }}>
+              v{h.version}
+            </span>
+            <span style={{ flex: 1 }}>
+              <div style={{ color: C.text, marginBottom: 2 }}>
+                {h.diffFromPrev.summary}
+              </div>
+              <div style={{ fontSize: 11, color: C.dim }}>
+                {h.updatedAt} · {h.chars.toLocaleString()}자
+                {h.diffFromPrev.added.length > 0 && (
+                  <span style={{ color: C.green, marginLeft: 8 }}>
+                    +{h.diffFromPrev.added.length} 섹션
+                  </span>
+                )}
+                {h.diffFromPrev.removed.length > 0 && (
+                  <span style={{ color: C.red, marginLeft: 8 }}>
+                    -{h.diffFromPrev.removed.length} 섹션
+                  </span>
+                )}
+              </div>
+            </span>
+            {isViewing && (
+              <span style={{ color: C.accent, fontSize: 11, fontWeight: 600 }}>보는 중</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+
 function RunStatusBox({ run }: { run: RunStatus }) {
-  const bg = run.status === 'success' ? '#f0fdf4' : run.status === 'failed' ? '#fff5f5' : C.surfaceAlt;
-  const border = run.status === 'success' ? C.green : run.status === 'failed' ? C.red : C.border;
-  const icon = run.status === 'success' ? '✓' : run.status === 'failed' ? '✗' : '⏳';
-  const text = run.status === 'success'
+  const isRunning = run.status === 'running';
+  const isOK = run.status === 'success' || run.status === 'partial_success';
+  const isFail = run.status === 'failed';
+
+  const bg = isOK ? '#f0fdf4' : isFail ? '#fff5f5' : C.surfaceAlt;
+  const border = isOK ? (run.status === 'partial_success' ? C.orange : C.green) : isFail ? C.red : C.border;
+  const icon = run.status === 'success' ? '✓'
+    : run.status === 'partial_success' ? '⚠'
+      : run.status === 'failed' ? '✗' : '⏳';
+
+  const headlineText = run.status === 'success'
     ? `완료 — ${run.diff_summary || ''}`
-    : run.status === 'failed'
-      ? `실패 — ${run.error || '알 수 없는 오류'}`
-      : 'Hermes가 자산을 분석하고 위키를 작성하는 중입니다... (보통 30~90초 소요)';
+    : run.status === 'partial_success'
+      ? `부분 완료 — ${run.diff_summary || ''}`
+      : run.status === 'failed'
+        ? `실패 — ${run.error || '알 수 없는 오류'}`
+        : (run.message || 'Hermes가 자산을 분석하고 위키를 작성하는 중입니다... (보통 30~90초 소요)');
+
+  const progress = run.progress ?? 0;
 
   return (
     <div style={{
-      background: bg, border: `1px solid ${border}`, borderRadius: 6,
-      padding: '10px 14px', marginBottom: 12, fontSize: 12, color: C.text,
-      display: 'flex', alignItems: 'center', gap: 10,
+      background: bg, border: `1px solid ${border}`, borderRadius: 8,
+      padding: '12px 14px', marginBottom: 12, color: C.text,
     }}>
-      <span style={{ fontSize: 16 }}>{icon}</span>
-      <span style={{ flex: 1 }}>{text}</span>
-      {run.input_count !== undefined && run.input_count > 0 && (
-        <span style={{ color: C.dim, fontSize: 11 }}>
-          {run.input_count}개 자산, {run.output_chars ?? 0}자
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+        <span style={{ fontSize: 16 }}>{icon}</span>
+        <span style={{ flex: 1 }}>{headlineText}</span>
+        {run.input_count !== undefined && run.input_count > 0 && (
+          <span style={{ color: C.dim, fontSize: 11 }}>
+            {run.input_count}개 자산, {run.output_chars ?? 0}자
+          </span>
+        )}
+      </div>
+
+      {isRunning && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{
+            height: 6, background: C.border, borderRadius: 3, overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.max(2, Math.min(100, progress))}%`,
+              background: C.accent,
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            marginTop: 4, fontSize: 11, color: C.dim,
+          }}>
+            <span>{run.stage ? `단계: ${run.stage}` : '시작 중...'}</span>
+            <span>{progress}%</span>
+          </div>
+        </div>
       )}
     </div>
   );

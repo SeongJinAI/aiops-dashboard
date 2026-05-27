@@ -8,12 +8,48 @@ import { detectEnv, envCommands, type Env } from '../constants/onboarding';
 interface ApiKeyStatus { has_key: boolean }
 interface RegenerateResponse { api_key: string }
 
-interface AnthropicStatus {
+interface ProviderStatus {
   has_key: boolean;
   preview: string | null;
   createdAt: string | null;
   lastUsedAt: string | null;
 }
+
+interface ProviderMeta {
+  name: 'anthropic' | 'openai' | 'gemini';
+  label: string;
+  defaultModel: string;
+  settingsUrl: string;
+  description: string;
+  placeholder: string;
+}
+
+const PROVIDER_METAS: ProviderMeta[] = [
+  {
+    name: 'anthropic',
+    label: 'Anthropic Claude',
+    defaultModel: 'claude-sonnet-4-5',
+    settingsUrl: 'https://console.anthropic.com/settings/keys',
+    description: '품질 우선 — 가장 긴 문맥, 다국어, 코드 추론에 강함.',
+    placeholder: 'sk-ant-api03-...',
+  },
+  {
+    name: 'openai',
+    label: 'OpenAI GPT',
+    defaultModel: 'gpt-4o',
+    settingsUrl: 'https://platform.openai.com/api-keys',
+    description: '범용성 — 가장 흔한 표준. 안정적이며 가격대비 좋음.',
+    placeholder: 'sk-...',
+  },
+  {
+    name: 'gemini',
+    label: 'Google Gemini',
+    defaultModel: 'gemini-2.0-flash',
+    settingsUrl: 'https://aistudio.google.com/apikey',
+    description: '구글 생태계 연동 — 무료 티어 존재. Workspace/Drive 향후 연동 유리.',
+    placeholder: 'AI...',
+  },
+];
 
 interface ConnectionsProps {
   onReopenWizard?: () => void;
@@ -58,8 +94,8 @@ export function Connections({ onReopenWizard }: ConnectionsProps) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text }}>연결 설정</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--s-sm, 8px)' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text }}>연결 설정</h2>
         {onReopenWizard && (
           <button onClick={onReopenWizard} style={btnSecondary}>
             온보딩 위저드 다시 보기
@@ -115,7 +151,7 @@ export function Connections({ onReopenWizard }: ConnectionsProps) {
         )}
       </Section>
 
-      <AnthropicKeySection />
+      <ProviderKeysGroup />
 
       <HookInstallSection
         env={env}
@@ -225,9 +261,27 @@ function HookInstallSection({
   );
 }
 
-function AnthropicKeySection() {
-  const { data: status, refetch } = useApi<AnthropicStatus>(
-    '/secrets/anthropic',
+function ProviderKeysGroup() {
+  return (
+    <Section title="AI 프로바이더 키 (BYOK) — Hermes 위키 생성용">
+      <p style={{ fontSize: 13, color: C.dim, marginBottom: 16, lineHeight: 1.6 }}>
+        본인 키를 등록하면 <strong>에이전트 (Hermes)</strong> 탭에서 위키 생성 시 선택해서 사용할 수 있습니다.
+        키는 모두 서버에서 <strong>AES-GCM으로 암호화</strong>되어 저장되며 평문은 보관되지 않습니다.
+        호출 비용은 본인 계정에 청구됩니다.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {PROVIDER_METAS.map((m) => (
+          <ProviderKeyCard key={m.name} meta={m} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+
+function ProviderKeyCard({ meta }: { meta: ProviderMeta }) {
+  const { data: status, refetch } = useApi<ProviderStatus>(
+    `/secrets/${meta.name}`,
     { has_key: false, preview: null, createdAt: null, lastUsedAt: null },
   );
   const [input, setInput] = useState('');
@@ -235,6 +289,7 @@ function AnthropicKeySection() {
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [skipVerification, setSkipVerification] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const register = async () => {
     const key = input.trim();
@@ -243,13 +298,12 @@ function AnthropicKeySection() {
     setMessage(null);
     try {
       const res = await apiPost<{ has_key: boolean; preview: string; verified: boolean; message: string }>(
-        '/secrets/anthropic', { key, skip_verification: skipVerification },
+        `/secrets/${meta.name}`, { key, skip_verification: skipVerification },
       );
       setMessage({ kind: 'ok', text: `등록 완료 · ${res.message}` });
       setInput('');
       refetch();
     } catch (e) {
-      // 백엔드 detail까지 보이도록 형태 그대로
       const errText = e instanceof Error ? e.message : '등록 실패';
       setMessage({ kind: 'err', text: errText });
     } finally {
@@ -262,7 +316,7 @@ function AnthropicKeySection() {
     setMessage(null);
     try {
       const token = getToken();
-      const res = await fetch('/api/secrets/anthropic', {
+      const res = await fetch(`/api/secrets/${meta.name}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -278,30 +332,52 @@ function AnthropicKeySection() {
   };
 
   return (
-    <Section title="Anthropic API 키 (Hermes 위키 생성용)">
-      <p style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.6 }}>
-        본인 Anthropic 키를 등록하면 <strong>에이전트 (Hermes)</strong> 탭의 위키 생성에 사용됩니다.
-        키는 서버에서 <strong>AES-GCM으로 암호화</strong>되어 저장됩니다 (평문 보관 X).
-        호출 비용은 본인 Anthropic 계정에 청구됩니다.
-        <br />
-        키 발급: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{ color: C.accent }}>
-          console.anthropic.com/settings/keys
-        </a>
-      </p>
+    <div style={{
+      background: C.bg,
+      border: `1px solid ${status.has_key ? C.green : C.border}`,
+      borderRadius: 8,
+      padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <span style={{
+          background: status.has_key ? C.green : C.surfaceAlt,
+          color: status.has_key ? '#fff' : C.dim,
+          padding: '2px 8px', borderRadius: 12,
+          fontSize: 10, fontWeight: 600,
+        }}>
+          {status.has_key ? '등록됨' : '미등록'}
+        </span>
+        <strong style={{ color: C.text, fontSize: 14 }}>{meta.label}</strong>
+        <span style={{ color: C.dim, fontSize: 11 }}>
+          기본 모델: <code style={{ fontFamily: 'monospace' }}>{meta.defaultModel}</code>
+        </span>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          style={{
+            marginLeft: 'auto',
+            background: 'transparent', border: 'none',
+            color: C.dim, fontSize: 12, cursor: 'pointer',
+            padding: 0, textDecoration: 'underline',
+          }}
+        >
+          {expanded ? '닫기' : (status.has_key ? '관리' : '등록')}
+        </button>
+      </div>
 
-      {status.has_key ? (
-        <div>
-          <Row label="상태" value="등록됨" />
+      <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.6, marginBottom: expanded ? 12 : 0 }}>
+        {meta.description}
+        {' · '}
+        <a href={meta.settingsUrl} target="_blank" rel="noreferrer" style={{ color: C.accent }}>
+          키 발급
+        </a>
+      </div>
+
+      {expanded && status.has_key && (
+        <div style={{ marginBottom: 12 }}>
           <Row label="키 미리보기" value={status.preview || '-'} mono />
           <Row label="등록 시각" value={status.createdAt || '-'} />
           <Row label="마지막 사용" value={status.lastUsedAt || '-'} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button
-              onClick={() => { setConfirmingDelete(false); setInput(''); setMessage(null); }}
-              style={btnSecondary}
-            >
-              새 키로 교체
-            </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             {confirmingDelete ? (
               <>
                 <button onClick={remove} disabled={busy} style={btnDanger}>
@@ -310,25 +386,23 @@ function AnthropicKeySection() {
                 <button onClick={() => setConfirmingDelete(false)} style={btnSecondary}>취소</button>
               </>
             ) : (
-              <button onClick={() => setConfirmingDelete(true)} style={btnDanger}>
-                키 삭제
-              </button>
+              <button onClick={() => setConfirmingDelete(true)} style={btnDanger}>키 삭제</button>
             )}
           </div>
         </div>
-      ) : null}
+      )}
 
-      {(!status.has_key || message) && (
-        <div style={{ marginTop: status.has_key ? 16 : 0 }}>
-          <label style={{ fontSize: 12, color: C.dim, fontWeight: 500, display: 'block', marginBottom: 6 }}>
-            {status.has_key ? '새 키 입력 (등록하면 기존 키 덮어씁니다)' : 'Anthropic API 키 입력'}
+      {expanded && (
+        <div>
+          <label style={{ fontSize: 11, color: C.dim, fontWeight: 500, display: 'block', marginBottom: 6 }}>
+            {status.has_key ? '새 키 입력 (등록 시 기존 키 덮어씁니다)' : `${meta.label} API 키 입력`}
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               type="password"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="sk-ant-api03-..."
+              placeholder={meta.placeholder}
               style={{
                 flex: 1, padding: '8px 12px', fontSize: 13,
                 fontFamily: 'monospace', border: `1px solid ${C.border}`,
@@ -347,40 +421,37 @@ function AnthropicKeySection() {
               {busy ? '검증 중...' : '등록'}
             </button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: C.dim, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: C.dim, cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={skipVerification}
               onChange={(e) => setSkipVerification(e.target.checked)}
             />
-            <span>검증 건너뛰기 (verify 호출이 실패할 때만 사용 — 잘못된 키도 통과됨)</span>
+            <span>검증 건너뛰기 (외부 verify 호출 실패 시에만)</span>
           </label>
-          <p style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
-            등록 시 짧은 테스트 호출(1~2초)로 키 유효성을 검증합니다. 사용 시점에는 진짜 위키 생성 호출이 일어납니다.
-          </p>
+          {message && (
+            <div style={{
+              marginTop: 8,
+              background: message.kind === 'ok' ? '#f0fdf4' : '#fff5f5',
+              border: `1px solid ${message.kind === 'ok' ? C.green : C.red}`,
+              borderRadius: 6, padding: '6px 10px', fontSize: 12,
+              color: message.kind === 'ok' ? C.green : C.red,
+            }}>
+              {message.text}
+            </div>
+          )}
         </div>
       )}
-
-      {message && (
-        <div style={{
-          marginTop: 12,
-          background: message.kind === 'ok' ? '#f0fdf4' : '#fff5f5',
-          border: `1px solid ${message.kind === 'ok' ? C.green : C.red}`,
-          borderRadius: 6, padding: '8px 12px', fontSize: 12,
-          color: message.kind === 'ok' ? C.green : C.red,
-        }}>
-          {message.text}
-        </div>
-      )}
-    </Section>
+    </div>
   );
 }
+
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${C.border}`,
-      borderRadius: 10, padding: 20, marginBottom: 16,
+      borderRadius: 6, padding: 'var(--s-md, 10px)', marginBottom: 'var(--s-sm, 8px)',
     }}>
       <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: C.text }}>{title}</h3>
       {children}

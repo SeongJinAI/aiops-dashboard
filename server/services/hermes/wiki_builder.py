@@ -10,10 +10,13 @@ Hermes — 위키 빌더.
 """
 import os
 from pathlib import Path
-from typing import Iterable
+from typing import Awaitable, Callable, Iterable
 
 from .catalog import AssetEntry
 from .llm_client import complete
+
+ProgressCallback = Callable[[str, str, int], Awaitable[None]]
+"""(stage, message, progress_percent) → 비동기 콜백."""
 
 
 # 한 파일당 본문에서 추출할 최대 글자 (앞부분)
@@ -129,6 +132,8 @@ async def build_chapter(
     repo_path: str,
     assets: list[AssetEntry],
     tenant_id: str | None = None,
+    progress_cb: ProgressCallback | None = None,
+    provider: str | None = None,
 ) -> tuple[str, int]:
     """한 perspective의 챕터 마크다운을 생성.
 
@@ -145,8 +150,33 @@ async def build_chapter(
         return f"## (자료 없음)\n\n자산은 있으나 본문을 읽을 수 없었습니다.", 0
 
     system, user = _build_prompt(project_name, perspective, corpus)
-    md = await complete(prompt=user, system=system, max_tokens=8000, tenant_id=tenant_id)
+
+    async def _on_retry(attempt: int, max_attempts: int, reason: str) -> None:
+        if progress_cb:
+            await progress_cb(
+                perspective,
+                f"{perspective} 챕터 재시도 중 ({attempt}/{max_attempts - 1}) — {reason}",
+                -1,
+            )
+
+    md = await complete(
+        prompt=user,
+        system=system,
+        max_tokens=8000,
+        tenant_id=tenant_id,
+        on_retry=_on_retry,
+        provider=provider,  # type: ignore[arg-type]
+    )
     return md, included
+
+
+# perspective별 진행률(시작/완료)
+_STAGE_PROGRESS = {
+    "catalog":   (5, 15),
+    "planner":   (20, 45),
+    "developer": (50, 75),
+    "user":      (80, 95),
+}
 
 
 async def build_all_perspectives(
@@ -154,14 +184,32 @@ async def build_all_perspectives(
     repo_path: str,
     grouped_assets: dict[str, list[AssetEntry]],
     tenant_id: str | None = None,
+    progress_cb: ProgressCallback | None = None,
+    provider: str | None = None,
 ) -> dict[str, dict]:
     """3 perspective 위키를 모두 생성. 직렬 호출 (rate limit 안전).
 
-    반환: {"planner": {"content": ..., "input_count": N}, ...}
+    반환: {"planner": {"content": ..., "input_count": N, "error": str | None}, ...}
+      - 한 perspective가 실패해도 다른 perspective는 계속 시도한다 (부분 성공 허용).
     """
     out: dict[str, dict] = {}
     for persp in ("planner", "developer", "user"):
         assets = grouped_assets.get(persp, [])
-        content, included = await build_chapter(project_name, persp, repo_path, assets, tenant_id=tenant_id)
-        out[persp] = {"content": content, "input_count": included}
+        start_pct, end_pct = _STAGE_PROGRESS[persp]
+        if progress_cb:
+            await progress_cb(persp, f"{persp} 챕터 생성 중...", start_pct)
+        try:
+            content, included = await build_chapter(
+                project_name, persp, repo_path, assets,
+                tenant_id=tenant_id, progress_cb=progress_cb,
+                provider=provider,
+            )
+            out[persp] = {"content": content, "input_count": included, "error": None}
+            if progress_cb:
+                await progress_cb(persp, f"{persp} 챕터 완료 ({included}개 자산)", end_pct)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            out[persp] = {"content": "", "input_count": 0, "error": err}
+            if progress_cb:
+                await progress_cb(persp, f"{persp} 챕터 실패 — {err}", end_pct)
     return out

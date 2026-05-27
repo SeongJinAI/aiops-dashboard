@@ -78,7 +78,7 @@ _SYSTEM_PREFIXES = ("<task-notification>", "<system-reminder>", "<command-name>"
 
 
 def compute_prompt_stats() -> dict:
-    """프롬프트 통계를 메모리에서 계산 (전체 + 사용자만 구분)"""
+    """프롬프트 통계를 메모리에서 계산 (전체 + 사용자만 구분 + 시간대/일별/길이 분포)"""
     raw = read_all_logs("prompts", days=90, limit=10000)
     user_prompts = [p for p in raw if not p.get("prompt", "").lstrip().startswith(_SYSTEM_PREFIXES)]
     system_prompts = [p for p in raw if p.get("prompt", "").lstrip().startswith(_SYSTEM_PREFIXES)]
@@ -97,6 +97,47 @@ def compute_prompt_stats() -> dict:
 
     by_repo = sorted([{"repo": k, "cnt": v} for k, v in repo_counts.items()], key=lambda x: -x["cnt"])
 
+    # 시간대 (0-23시)
+    hourly = [0] * 24
+    for p in user_prompts:
+        ts = p.get("ts", "")
+        if len(ts) >= 13 and ts[10] in ("T", " "):
+            try:
+                h = int(ts[11:13])
+                if 0 <= h < 24:
+                    hourly[h] += 1
+            except ValueError:
+                pass
+
+    # 일별 — 최근 30일
+    days_window = 30
+    today_date = date.today()
+    daily_counts: dict[str, int] = {}
+    for i in range(days_window):
+        d = (today_date - timedelta(days=days_window - 1 - i)).isoformat()
+        daily_counts[d] = 0
+    for p in user_prompts:
+        ts = p.get("ts", "")[:10]
+        if ts in daily_counts:
+            daily_counts[ts] += 1
+    daily = [{"date": d, "cnt": c} for d, c in daily_counts.items()]
+
+    # 길이 분포
+    length_buckets = [
+        {"label": "≤100", "max": 100, "cnt": 0},
+        {"label": "100-300", "max": 300, "cnt": 0},
+        {"label": "300-1k", "max": 1000, "cnt": 0},
+        {"label": "1k-3k", "max": 3000, "cnt": 0},
+        {"label": "3k+", "max": None, "cnt": 0},
+    ]
+    for p in user_prompts:
+        tok = p.get("tokens", 0) or 0
+        for b in length_buckets:
+            mx = b["max"]
+            if mx is None or tok <= mx:
+                b["cnt"] += 1
+                break
+
     return {
         "total": total,
         "userTotal": user_total,
@@ -104,6 +145,9 @@ def compute_prompt_stats() -> dict:
         "today": today_count,
         "avgTokens": avg_tokens,
         "byRepo": by_repo,
+        "hourly": hourly,
+        "daily": daily,
+        "lengthBuckets": [{"label": b["label"], "cnt": b["cnt"]} for b in length_buckets],
     }
 
 

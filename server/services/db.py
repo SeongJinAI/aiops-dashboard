@@ -186,6 +186,49 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
 
     by_repo = sorted([{"repo": k, "cnt": v} for k, v in repo_counts.items()], key=lambda x: -x["cnt"])
 
+    # 시간대별 분포 (0-23시) — 사용자 프롬프트만
+    hourly = [0] * 24
+    for p in user_prompts:
+        ts = p.get("ts", "")
+        # ISO8601 의 시간 부분 추출 (YYYY-MM-DDTHH:MM:SS...)
+        if len(ts) >= 13 and ts[10] in ("T", " "):
+            try:
+                h = int(ts[11:13])
+                if 0 <= h < 24:
+                    hourly[h] += 1
+            except ValueError:
+                pass
+
+    # 일별 추세 — 최근 30일 (오래된→최신 순)
+    days_window = 30
+    today_date = date.today()
+    daily_counts: dict[str, int] = {}
+    for i in range(days_window):
+        d = (today_date - timedelta(days=days_window - 1 - i)).isoformat()
+        daily_counts[d] = 0
+    for p in user_prompts:
+        ts = p.get("ts", "")[:10]
+        if ts in daily_counts:
+            daily_counts[ts] += 1
+    daily = [{"date": d, "cnt": c} for d, c in daily_counts.items()]
+
+    # 토큰 길이 분포
+    # 버킷: 0-100 / 100-300 / 300-1000 / 1000-3000 / 3000+
+    length_buckets = [
+        {"label": "≤100", "max": 100, "cnt": 0},
+        {"label": "100-300", "max": 300, "cnt": 0},
+        {"label": "300-1k", "max": 1000, "cnt": 0},
+        {"label": "1k-3k", "max": 3000, "cnt": 0},
+        {"label": "3k+", "max": None, "cnt": 0},
+    ]
+    for p in user_prompts:
+        tok = p.get("tokens", 0) or 0
+        for b in length_buckets:
+            mx = b["max"]
+            if mx is None or tok <= mx:
+                b["cnt"] += 1
+                break
+
     return {
         "total": total,
         "userTotal": user_total,
@@ -193,6 +236,9 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
         "today": today_count,
         "avgTokens": avg_tokens,
         "byRepo": by_repo,
+        "hourly": hourly,
+        "daily": daily,
+        "lengthBuckets": [{"label": b["label"], "cnt": b["cnt"]} for b in length_buckets],
     }
 
 
