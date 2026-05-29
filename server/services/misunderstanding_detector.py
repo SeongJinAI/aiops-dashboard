@@ -15,9 +15,13 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from sqlalchemy import select
+
+from models.db_models import Log
+from services.database import session_scope
 
 
 # 패턴 키워드 (한국어 위주 — 영어도 일부)
@@ -94,7 +98,7 @@ def _parse_iso(ts: str) -> datetime | None:
 async def detect_from_prompt(
     tenant_id: str,
     current_payload: dict,
-    db_path: str,
+    db_path: str | None = None,  # 하위 호환 (사용 안 함 — SQLAlchemy 엔진 사용)
 ) -> dict | None:
     """방금 들어온 prompt를 분석하여 오해 감지 시 misunderstanding payload를 반환.
 
@@ -117,28 +121,24 @@ async def detect_from_prompt(
     prev_prompt = ""
     prev_session = current_payload.get("session", "")
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """SELECT payload FROM logs
-               WHERE tenant_id=? AND category='prompts'
-               ORDER BY ts DESC LIMIT 5""",
-            (tenant_id,),
-        ).fetchall()
-        conn.close()
+        async with session_scope() as s:
+            payloads = (await s.execute(
+                select(Log.payload)
+                .where(Log.tenant_id == tenant_id, Log.category == "prompts")
+                .order_by(Log.ts.desc())
+                .limit(5)
+            )).scalars().all()
 
-        for r in rows:
+        for raw in payloads:
             try:
-                p = json.loads(r["payload"])
+                p = json.loads(raw)
             except Exception:
                 continue
             ptext = (p.get("prompt") or "").lstrip()
             if not ptext or ptext.startswith(sys_prefixes):
                 continue
-            # 본인(current) 메시지 제외
             if p.get("ts") == current_payload.get("ts") and ptext == text:
                 continue
-            # 시간 윈도우 안에 있어야
             pts = _parse_iso(p.get("ts", ""))
             if curr_ts and pts and (curr_ts - pts) > _TIME_WINDOW:
                 continue
@@ -167,7 +167,7 @@ async def detect_from_prompt(
 async def detect_from_hook(
     tenant_id: str,
     hook_payload: dict,
-    db_path: str,
+    db_path: str | None = None,  # 하위 호환 (사용 안 함)
 ) -> dict | None:
     """Hook 차단(exit != 0)을 미숙지 사례로 기록.
 
@@ -182,18 +182,16 @@ async def detect_from_hook(
     # 직전 사용자 prompt 가져오기 (컨텍스트용)
     prev_prompt = ""
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """SELECT payload FROM logs
-               WHERE tenant_id=? AND category='prompts'
-               ORDER BY ts DESC LIMIT 1""",
-            (tenant_id,),
-        ).fetchall()
-        conn.close()
-        if rows:
+        async with session_scope() as s:
+            raw = (await s.execute(
+                select(Log.payload)
+                .where(Log.tenant_id == tenant_id, Log.category == "prompts")
+                .order_by(Log.ts.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+        if raw:
             try:
-                p = json.loads(rows[0]["payload"])
+                p = json.loads(raw)
                 prev_prompt = (p.get("prompt") or "")[:500]
             except Exception:
                 pass

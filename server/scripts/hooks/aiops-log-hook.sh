@@ -46,6 +46,12 @@ except: ms = 0
 
 is_mcp = tool_name.startswith('mcp__')
 
+# .md 자산 sync 후보 — Edit/Write/MultiEdit이 .md를 만진 경우
+file_path = ''
+if tool_name in ('Edit', 'Write', 'MultiEdit') and isinstance(tool_input, dict):
+    file_path = tool_input.get('file_path', '') or ''
+is_md_edit = bool(file_path) and file_path.lower().endswith('.md')
+
 entry = {
     "ts": datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).isoformat(timespec="seconds"),
     "hook": "PostToolUse",
@@ -56,6 +62,8 @@ entry = {
     "repo": repo,
     "session_id": d.get('session_id', ''),
     "is_mcp": is_mcp,
+    "file_path": file_path,
+    "is_md_edit": is_md_edit,
 }
 print(json.dumps(entry, ensure_ascii=False))
 PYEOF
@@ -94,5 +102,64 @@ print(json.dumps({'tenant_id': sys.argv[2], 'category': sys.argv[3], 'payload': 
 
 send_remote "hooks"
 [ "$IS_MCP" = "True" ] && send_remote "mcp_calls"
+
+# 3) .md 자산이 수정/생성됐으면 백엔드 DB로 sync — Hermes 위키 빌더/RAG 입력
+IS_MD_EDIT="$(echo "$PARSED" | python3 -c "import sys,json;print(json.loads(sys.stdin.read()).get('is_md_edit', False))")"
+FILE_PATH="$(echo "$PARSED" | python3 -c "import sys,json;print(json.loads(sys.stdin.read()).get('file_path', ''))")"
+
+send_asset() {
+    local FILE="$1"
+    [ -f "$FILE" ] || return 0
+    # REPO_ROOT 안의 파일만 허용 (path traversal 차단)
+    case "$FILE" in
+        "$REPO_ROOT"/*) ;;
+        *) return 0 ;;
+    esac
+    [ -n "$AIOPS_REMOTE_URL" ] && [ -n "$AIOPS_API_KEY" ] && [ -n "$AIOPS_TENANT_ID" ] || return 0
+    REPO_ROOT="$REPO_ROOT" FILE="$FILE" REPO_NAME="$REPO_NAME" \
+    TENANT="$AIOPS_TENANT_ID" BASE="$AIOPS_REMOTE_URL" KEY="$AIOPS_API_KEY" \
+    python3 - <<'PYEOF' >/dev/null 2>&1 &
+import os, json, urllib.request, urllib.error, datetime
+repo_root = os.environ["REPO_ROOT"]
+full      = os.environ["FILE"]
+project   = os.environ["REPO_NAME"]
+tenant    = os.environ["TENANT"]
+base      = os.environ["BASE"]
+key       = os.environ["KEY"]
+
+rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
+if rel.startswith(".."):
+    raise SystemExit(0)
+try:
+    content = open(full, "r", encoding="utf-8", errors="ignore").read()
+except Exception:
+    raise SystemExit(0)
+size = len(content.encode("utf-8"))
+if size > 900_000:
+    raise SystemExit(0)
+try:
+    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(full)).isoformat()
+except Exception:
+    mtime = ""
+
+body = json.dumps({
+    "tenant_id": tenant,
+    "project_name": project,
+    "item": {"path": rel, "content": content, "size_bytes": size, "modified_at": mtime},
+}).encode("utf-8")
+req = urllib.request.Request(
+    base + "/api/assets/sync-one", data=body, method="POST",
+    headers={"Content-Type": "application/json", "X-API-Key": key},
+)
+try:
+    urllib.request.urlopen(req, timeout=3)
+except Exception:
+    pass
+PYEOF
+}
+
+if [ "$IS_MD_EDIT" = "True" ] && [ -n "$FILE_PATH" ]; then
+    send_asset "$FILE_PATH"
+fi
 
 exit 0

@@ -41,10 +41,10 @@ async def complete(
 
 
 # 하위 호환 별칭
-def load_anthropic_key(tenant_id: str | None = None) -> str | None:
+async def load_anthropic_key(tenant_id: str | None = None) -> str | None:
     """[Deprecated] Anthropic 키만 로드. 일반화된 services.llm 추천."""
     p = get_provider("anthropic", tenant_id=tenant_id)
-    return p.load_key()
+    return await p.load_key()
 
 
 __all__ = ["complete", "LLMNotConfigured", "DEFAULT_MODEL", "load_anthropic_key"]

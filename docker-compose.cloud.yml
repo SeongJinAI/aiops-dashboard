@@ -1,45 +1,81 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nova}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-nova}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nova} -d ${POSTGRES_DB:-nova}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build: ./server
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
-      - db-data:/app/data
+      - app-data:/app/data
     environment:
-      - AIOPS_MODE=saas
-      - AIOPS_API_KEYS=${AIOPS_API_KEYS}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-24}
-      - AIOPS_CORS_ORIGINS=${AIOPS_CORS_ORIGINS:-https://dashboard.example.com}
-      - PROJECTS_FILE=/app/data/projects.json
-      - DB_PATH=/app/data/aiops.db
+      AIOPS_MODE: saas
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-24}
+      AIOPS_CORS_ORIGINS: ${AIOPS_CORS_ORIGINS:-https://dashboard.example.com}
+      AIOPS_PUBLIC_URL: ${AIOPS_PUBLIC_URL}
+      HERMES_MASTER_KEY: ${HERMES_MASTER_KEY}
+      PROJECTS_FILE: /app/data/projects.json
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nova}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nova}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # alembic upgrade head → uvicorn
+    command: >
+      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
 
   frontend:
     build: ./frontend
-    ports:
-      - "5173:80"
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2-alpine
+  nginx:
+    image: nginx:1.27-alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy-data:/data
-      - caddy-config:/config
+      - ./deploy/nginx/nova.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
     depends_on:
       - backend
       - frontend
     restart: unless-stopped
 
+  # SSL 인증서 발급/갱신 — 도메인 보유 시에만 사용.
+  # 초기 발급:
+  #   docker compose -f docker-compose.cloud.yml run --rm certbot \
+  #     certonly --webroot -w /var/www/certbot -d your-domain.com --email you@example.com --agree-tos --no-eff-email
+  # 자동 갱신은 별도 cron으로 (또는 컨테이너 always-on + 12h 슬립 루프).
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;"
+    profiles: ["ssl"]  # 도메인이 없으면 비활성. 활성화: --profile ssl
+
 volumes:
-  db-data:
-  caddy-data:
-  caddy-config:
+  postgres-data:
+  app-data:
+  certbot-etc:
+  certbot-www:

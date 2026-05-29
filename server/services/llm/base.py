@@ -38,12 +38,13 @@ class LLMProvider(ABC):
 
     # --- 공통 키 로드 ---
 
-    def load_key(self) -> str | None:
-        """tenant_id 우선 → env → ~/.claude/.env 순으로 키 로드."""
+    async def load_key(self) -> str | None:
+        """tenant_id 우선 → env → ~/.claude/.env 순으로 키 로드.
+        DB 조회가 async라 메소드 자체를 async로 유지 (호출처는 모두 async 컨텍스트)."""
         if self.tenant_id:
             try:
                 from services.secret_store import get_secret_plain
-                key = get_secret_plain(self.tenant_id, self.name)
+                key = await get_secret_plain(self.tenant_id, self.name)
                 if key:
                     return key
             except Exception:
@@ -70,9 +71,9 @@ class LLMProvider(ABC):
             return None
         return None
 
-    def require_key(self) -> str:
+    async def require_key(self) -> str:
         """키를 반환하거나 LLMNotConfigured raise."""
-        key = self.load_key()
+        key = await self.load_key()
         if not key:
             raise LLMNotConfigured(
                 f"{self.label} API 키가 설정되지 않았습니다. "

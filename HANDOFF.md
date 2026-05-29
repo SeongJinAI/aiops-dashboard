@@ -1,5 +1,266 @@
 # HANDOFF.md
 
+## 2026.05.29 16:30 — 제품 피벗: 랜딩/퍼널 + 프리미엄(프롬프트 라이브러리) + 코칭 중심 IA
+
+### 한 줄 요약
+
+> "5-레포 운영 대시보드"에서 **완전 개인화된 AI 코칭 SaaS**로 방향 전환. 덱 스타일을 제품에 연결한 **공개 랜딩 → 회원가입 → 로그인 → 프리미엄 구독** 퍼널. 프리미엄 핵심 = **프롬프트 라이브러리**(opt-in한 사용자 프롬프트를 LLM이 주제별 익명 템플릿으로 증류, 원본 비공개·secret 마스킹). 결제는 목(플래그). IA를 코칭 중심으로 재편(레포맵/5-레포 nav 제거).
+
+### 사용자 결정 (AskUserQuestion)
+
+- 공유 모델: **증류 템플릿만**(원본 비공개) · 결제: **프리미엄 플래그+목 체크아웃** · 소비: **대시보드 라이브러리(복사)** · IA: **개인 코칭 중심 전면 재편**
+
+### 이번 세션 완료 작업
+
+**#1 백엔드 기반** ✅
+- 모델 2종(`models/db_models.py`): `Subscription(tenant_id PK, plan, share_opt_in)`, `PromptTemplate(topic,title,body,tags,example_count)`. **새 테이블이라 create_all이 자동 생성 — 마이그레이션 불필요**.
+- `services/billing.py`: get/set plan·share_opt_in, is_premium, PLANS(가격표 단일 진실). plan은 JWT 아닌 DB에서 읽음(재로그인 없이 즉시 반영).
+- `services/prompt_library.py`: opt-in 테넌트 프롬프트 수집(secret_masker 마스킹·중복 제거·최대 250) → BYOK LLM 증류 → 글로벌 템플릿 교체. 원본 미저장.
+- `routers/billing.py`(status/checkout-mock/cancel/share-opt-in), `routers/library.py`(templates/distill, 둘 다 `require_premium`). `middleware/auth.py`에 `require_premium`(402) 추가. `main.py` 등록.
+- 검증: TestClient + HTTP — 비프리미엄 402 / 목 checkout→pro→200 / corpus 250개 마스킹 수집 / distill 키없음 400. 테넌트는 **free로 리셋**(사용자 퍼널 직접 체험용).
+
+**#2 랜딩 + 퍼널** ✅
+- `pages/Landing.tsx` + `styles/landing.css`: 덱 미학(oklch 토큰, 라이트 기본+다크 자동). 히어로(코치 카드 목업)+Track/Wikify/Coach+프롬프트 라이브러리 Pro 티저+가격표(Free/Pro)+CTA.
+- `App.tsx`: 미인증 시 `authView: landing|auth` → Landing(로그인/시작하기) → `Login`. `Login.tsx`에 `initialMode`/`onBack` 추가.
+
+**#3 라이브러리/구독 페이지** ✅
+- `pages/Subscribe.tsx`: 플랜 카드 + 목 업그레이드/취소 + 공유 opt-in 토글(스위치).
+- `pages/Library.tsx`: 비프리미엄=잠금+업그레이드 CTA / 프리미엄=주제 필터+템플릿 카드+복사+증류(BYOK provider select). opt-in 안내.
+- `ui.css`에 plan/switch/library 클래스 추가.
+
+**#4 IA 코칭 중심 재편** ✅
+- `nav.ts`: `코칭`(홈·코치·프롬프트·프롬프트 라이브러리[Pro]·오해 추적·Hook 활동) + `에이전트·계정`(위키 에이전트·연결·구독). **레포맵·프로젝트·워크플로우·Claude설정 nav에서 제거**(라우트는 유지, breadcrumb는 OFF_NAV_LABELS로 보정).
+- `Home.tsx` 재작성: 5-레포 "레포 아키텍처" 섹션 제거 → 협업 점수 요약(`/coach/report`) + 바로가기(코치·라이브러리·위키).
+- 검증: `npm run build` 통과(1947 모듈, tsc 0 error).
+
+### 다음 세션에 할 작업
+
+- **라이브러리 증류 실제 1회 실행**(BYOK 키+크레딧): 사용자가 구독 opt-in → 라이브러리 갱신 → 실제 템플릿 확인.
+- **실결제(Lemon Squeezy)**: checkout이 redirect URL 반환 + webhook으로 plan 갱신. 지금은 목.
+- 자동완성(에디터 연동) — 추후 API/슬래시 명령으로 라이브러리 노출.
+- 랜딩 카피/비주얼 다듬기, 다크 히어로 옵션 검토.
+- off-nav 페이지(레포맵 등) 완전 제거 여부 결정.
+
+### 주의사항
+
+- **퍼널 확인은 로그아웃 상태에서**: 이미 로그인된 세션은 랜딩을 건너뜀. 랜딩→가입→구독 흐름은 로그아웃(또는 새 시크릿 창)으로 확인. vite HMR이 새 파일 못 잡으면 하드 새로고침.
+- **plan은 DB(Subscription) 기반**: 목 checkout은 즉시 pro. 실제 청구 없음. 테넌트 edf0aee3는 현재 free로 리셋됨.
+- **프라이버시**: 라이브러리 corpus는 share_opt_in=True 테넌트 + 호출자만, secret_masker 적용. 원본 프롬프트는 PromptTemplate에 저장 안 함(증류 결과만).
+- **JWT 서명**: 테스트 토큰 생성 시 반드시 .env 로드(JWT_SECRET 일치). 안 그러면 401.
+- 백엔드는 재시작해야 새 라우터 반영(--reload 미사용). 프론트 vite는 자동.
+
+### 관련 파일 (이번 세션)
+
+**백엔드 신규**: `services/billing.py`, `services/prompt_library.py`, `routers/billing.py`, `routers/library.py`
+**백엔드 변경**: `models/db_models.py`(Subscription·PromptTemplate), `middleware/auth.py`(require_premium), `main.py`(라우터 등록)
+**프론트 신규**: `pages/Landing.tsx`, `pages/Subscribe.tsx`, `pages/Library.tsx`, `styles/landing.css`
+**프론트 변경**: `App.tsx`(퍼널+라우트), `pages/Login.tsx`(initialMode/onBack), `pages/Home.tsx`(코칭 중심 재작성), `constants/nav.ts`(IA 재편), `styles/ui.css`(plan/switch/library)
+
+---
+
+## 2026.05.29 15:00 — Coach(3단계) 구현 + Nova 브랜드 통일 + 발표자료
+
+### 한 줄 요약
+
+> Track/Wikify는 완성, **Coach(가치사슬 3번째 다리)만 미구현**이던 빈 자리를 채웠다. 축적된 프롬프트·Hook·오해 데이터 → **룰 기반 협업 점수(명확성/거버넌스/꾸준함) + 실행 가능한 인사이트**(LLM 불필요, 항상 동작) + 선택적 BYOK LLM 코치 브리핑. 브랜드를 **Nova로 통일**(섹션명·잔재 정리). **부산 AI 카르텔 발표용 단일 HTML 덱**(20슬라이드) + 데모 스크립트 작성, 3-렌즈 적대적 리뷰 후 수정.
+
+### 이번 세션 완료 작업
+
+**#1 Coach 백엔드** ✅
+- `server/services/coach.py` 신규: `generate_report(tenant_id)` — 룰 기반. 점수 3종(명확성=오해율 역산 / 거버넌스=Hook 통과율 / 꾸준함=최근14일 활동일), 인사이트 6종(오해 반복·Hook 핫스팟·통과율·긴 프롬프트·피크 시간대·활동 추세), 헤드라인, lowData/정직한 빈 상태. `synthesize()` — BYOK provider로 한국어 코치 브리핑(선택).
+- `server/routers/coach.py` 신규: `GET /api/coach/report`(전역 120/min), `POST /api/coach/summary`(20/min, LLMNotConfigured→400). `main.py`에 `/api/coach` 등록.
+- **핵심 설계**: 점수+인사이트는 LLM 키 없이도 동작 → 데모/무료 티어 신뢰성. (과거 Anthropic 크레딧 0 블로커 회피)
+- 검증: 실데이터(tenant edf0aee3) TestClient E2E — 무인증 401 / 인증 200 (**점수 85·B**, 명확성99·거버넌스100·꾸준함57, 인사이트 4) / 키없음 summary 400.
+
+**#2 Coach 프론트 + 네비/라우팅 + 브랜드** ✅
+- `frontend/src/pages/Coach.tsx` 신규: 토큰 기반(인라인스타일 없음, 다크모드 안전). 점수 카드 + 메트릭 바 + 인사이트 카드(severity 좌측 보더) + BYOK 브리핑(provider select + react-markdown).
+- `nav.ts`: 3번째 섹션 `Nova`→`Agent`, **코치** 항목 추가(`/coach`, lightbulb). `App.tsx` 라우트 + import.
+- `Misunderstandings.tsx`: "Coach 비전(미구현)" 빈 상태 → 실제 **코치 열기** 버튼.
+- `ui.css`: `.insight*`, `.coach-*` 클래스 추가(meter tone 변형은 기존 재사용).
+- 브랜드 정리: `repos.ts` TABS `"에이전트 (Hermes)"`→`"에이전트"`, `projects.py` 안내 메시지 `Hermes 자산 카탈로그`→`자산 카탈로그`.
+- 검증: `npm run build` 통과(1943 모듈, tsc 0 error).
+
+**#3 발표자료 (부산 AI 카르텔)** ✅
+- `발표/발표자료.html` — 단일 자가완결 HTML 덱(**14슬라이드**). 제품과 동일 oklch 토큰·다크 기본(T 라이트 토글, F 풀스크린, ←→/Space 네비, 진행바/카운터). 외부 의존=Pretendard CDN 폰트뿐.
+- **방향(중요)**: 발표자는 "커뮤니티를 설명하는 사람"이 아니라 "모임에서 **프로젝트(Nova)를 발표**하는 사람". 커뮤니티(부산 AI 카르텔)는 **맥락·청중**이지 주제가 아님 → 매니페스토 선언/커뮤니티 비전("부산 AI 하면 떠올리는 이름", 엔진 루프) **덜어냄**. 커뮤니티는 오프닝 1장("가져오는 자리니까 가져왔다")·연결 1장("닮았더라고요")으로 가볍게만.
+- 서사: 오프닝(가벼운 모임 맥락) → 문제 → Nova(Track/Wikify/Coach) → 실데이터 → **Coach 클라이맥스** → 라이브 데모 → build in public/로드맵 → 연결(Track≈가져온다/Wikify≈나눈다/Coach≈끌어올린다, 겸손) → CTA(같이 써볼 사람).
+- `발표/데모-스크립트.md` — Track→Wikify→Coach 단계별 라이브 데모 스크립트(5~6분) + 사전 점검 + 실패 대비.
+- **3-렌즈 적대적 리뷰**(workflow): 사실/서사/디자인. 적용: SVG `fill="var()"` 블로커 수정(`.mk-bg`/`.mk-fg` CSS), 매핑 순서/의미 재배치, "양이 아닌 질" 카피, CTA 액션, 메타 강화, 시제. **기각**: fact-check의 "피크 16→07시" 오판(배열 174는 index 16이 맞음, python 검증).
+
+### 다음 세션에 할 작업
+
+- **Coach 고도화**: 추세/시간대 인사이트에 차트 추가, wiki 신선도 인사이트(hermes 결합), 코치 점수 추이(시계열 저장).
+- **첫 Alembic 마이그레이션**(이전 세션 펜딩, PG 켠 상태 필요).
+- **RAG 챗봇**(pgvector) — 다음 Phase.
+- **보조 페이지 다크모드**: RepoMap/ClaudeConfig/OnboardingWizard (구식 인라인+colors.ts, 데모 라이트모드면 무방).
+- 발표 당일: 재로그인(JWT 24h), 코치/프롬프트 페이지 사전 로드, 디스플레이 세로 해상도에서 14번 슬라이드 잘림 점검.
+
+### 주의사항
+
+- **Coach 점수는 실데이터가 좋을수록 warn/suggest가 적게 뜬다**(현재 tenant는 점수 85·통과율100%라 good/info 위주). 데모에서 경고 카드를 보이려면 지저분한 프로젝트 필요 — 데모 스크립트에 이 점 명시.
+- **Track 수치는 라이브 데이터**(계속 증가) → 덱의 1,056/2,283은 "현재 기준"이며 제품 화면(userTotal·30일 윈도우)과 일치하도록 맞춤. 발표 당일엔 라이브 화면이 최신.
+- **타임존**: 시간대 분포는 로그 ts의 hour 필드 그대로(UTC/local 여부 미확정). 피크 index 16은 데이터상 사실. 데모 전 한 번 확인 권장.
+- 이전 세션 주의사항(uvicorn graceful shutdown, secret_store async, SQLAlchemy upsert, 백그라운드 기동은 포그라운드로) 그대로 유효.
+
+### 관련 파일 (이번 세션)
+
+**백엔드 신규/변경**: `server/services/coach.py`(신규), `server/routers/coach.py`(신규), `server/main.py`(coach 등록), `server/routers/projects.py`(브랜드 메시지)
+**프론트 신규/변경**: `frontend/src/pages/Coach.tsx`(신규), `frontend/src/App.tsx`, `frontend/src/constants/nav.ts`, `frontend/src/pages/Misunderstandings.tsx`, `frontend/src/styles/ui.css`, `frontend/src/constants/repos.ts`
+**발표**: `발표/발표자료.html`(신규), `발표/데모-스크립트.md`(신규)
+
+---
+
+## 2026.05.29 — UI 교체 + 자산 sync + PostgreSQL/SQLAlchemy + nginx
+
+### 한 줄 요약
+
+> Nova 디자인 시스템으로 프론트 전면 교체 → SaaS 시나리오 정합성(공개 URL, 자산 sync) → DB를 SQLite raw SQL에서 SQLAlchemy(PostgreSQL 우선/SQLite 폴백)로 전환 → Caddy 대신 nginx 운영 리버스 프록시. 직접 SQL 호출 10개 파일을 모두 ORM으로 마이그레이션.
+
+### 이번 세션 완료 작업
+
+**#1 UI 전면 교체 — Nova 디자인 시스템** ✅
+- `frontend-new/` (frontend-design 산출물, 자체 CSS 디자인 시스템) → 기존 React 19 + Vite + TS에 통합.
+- `styles/tokens.css`+`styles/ui.css` 이식 (oklch, density compact/normal/roomy, light/dark).
+- `ui/Icon.tsx` (lucide-react name 매핑), `ui/primitives.tsx` (Box/StatCard/Chip/Btn/EmptyState/Skeleton/Avatar), `ui/toast.tsx` (ToastProvider/useToast).
+- `app/AppShell.tsx`: Sidebar(3섹션 10항목) + TopBar + CommandPalette(⌘K/B/D) + Toast. localStorage로 theme/density 영속.
+- `App.tsx`: TabBar(평면 10) → path 기반 switch 라우팅. 인증/모드 분기·OnboardingWizard 보존.
+- 새 디자인 + 실데이터 페이지: Home/HookMonitor/Prompts/Misunderstandings/Agent/Connections/ProjectSwap/WorkflowTracker/Login.
+- 구 파일 정리: TabBar/ChatBot/ConnectionStatus/shared/* + 구 SystemStatus/PromptHistory/MisunderstandingTracker + `constants/design.ts` 삭제.
+
+**#2 페이지 이동 시 강제 로그아웃 버그 fix** ✅
+- 원인: `/api/projects` (slash 없음) → FastAPI 307 → `/api/projects/` → fetch redirect 시 Authorization 헤더 드롭 → 401 → `useApi.handleUnauthorized()`가 localStorage 정리 + reload.
+- fix: `routers/projects.py`에 `@router.get("")` 추가(secrets와 동일 패턴) + 프론트 호출에 trailing slash 명시.
+
+**#3 install.sh URL이 vite dev origin(5173)으로 박히는 버그 fix** ✅
+- 원인 1: 백엔드 `resolve_public_url`이 vite proxy의 Host(5173)를 봄 → `vite.config.ts`에 `changeOrigin: true` 추가.
+- 원인 2: `App.tsx`의 `apiBase` 초기값이 `window.location.origin`(=5173) → `inferInitialApiBase()` 추가 (5173/5174면 8000으로 즉시 보정).
+- 추가 UX: install.sh에 `?download=1` 쿼리 → `Content-Disposition: attachment` 응답. Connections/OnboardingWizard에 **"install.sh 다운로드"** 버튼.
+
+**#4 자산 sync 메커니즘 — SaaS에서 Hermes 위키 빌더 동작 복구** ✅
+- 신규 테이블 `assets(tenant_id, project_name, path, perspective, bucket, content, size_bytes, modified_at)`.
+- 신규 라우터 `routers/assets.py`: `POST /api/assets/sync`(배치 200개), `/sync-one`, `/delete`, `/list`. path traversal 차단, `.md`만 허용, 1MB 제한, project 등록 검증.
+- `services/hermes/catalog.py`: `classify_asset()` public alias + `AssetEntry.content` 옵션 필드.
+- `services/hermes/wiki_builder.py`: `_asset_text()` — SaaS는 `asset.content` 사용, local은 파일에서 읽음.
+- `routers/hermes.py`: `_load_assets()` 분기 — SaaS면 DB의 `list_assets`, local이면 `catalog_assets`.
+- `install.sh` `[4/5]` 단계 추가: `python3 -c`로 REPO_ROOT 안 `.md` 전수 수집 → 100개씩 배치 push.
+- PostToolUse Hook(`aiops-log-hook.sh`): Edit/Write/MultiEdit이 `.md`를 만지면 `/api/assets/sync-one`으로 자동 push (REPO_ROOT 안만).
+- 검증: 가짜 자산 3개 INSERT → `_load_assets()` 반환 정확 + `group_by_perspective`/`summarize` 정상.
+
+**#5 PostgreSQL + SQLAlchemy 전면 전환** ✅
+- 의존성: `sqlalchemy[asyncio]>=2.0`, `asyncpg>=0.29`, `alembic>=1.13` 추가.
+- `models/db_models.py`: 전 9테이블 ORM 모델 (Tenant/User/Log/Project/HermesWiki/HermesWikiRun/TenantSecret/HermesSoul/Asset).
+- `services/database.py`: async engine + `session_scope`(context) + `get_session`(Depends) + `init_db`(dev 폴백). `DATABASE_URL` 환경변수 우선, 없으면 `DB_PATH`로 SQLite 폴백.
+- `services/db.py` 전면 재작성 (시그니처 유지): `insert_log`/`query_logs`/`compute_*_stats`/`upsert_asset`/`list_assets` 등. PG/SQLite 모두 `INSERT ... ON CONFLICT DO UPDATE` 지원(dialect별 `_ins.on_conflict_do_update`).
+- **라우터/서비스 10개 파일의 직접 SQL 모두 제거** (검증: grep `sqlite3.connect|aiosqlite.connect` 0건):
+  - `routers/{auth,assets,hermes,repos,secrets}.py`
+  - `services/{auth,project_swap,secret_store,misunderstanding_detector,claude_config_scanner}.py`
+- `secret_store` + `LLMProvider.load_key/require_key` async 통일. 각 provider(anthropic/openai/gemini)의 `complete()`에서 `await self.require_key()`.
+- Alembic: `server/alembic.ini` + `alembic/env.py`(async) + `script.py.mako`. 첫 마이그레이션은 다음 세션에서 (PostgreSQL 띄운 상태 필요).
+
+**#7 Coach 페이지 신설 — Track → Wikify → Coach 가치 사슬 완성** ✅ (세션 막판)
+- 백엔드 `services/coach.py` + `routers/coach.py`:
+  - `GET /api/coach/report` — 룰 기반 협업 점수(score/grade) + metrics + insights(severity별: warn/suggest/good/info). LLM 불필요, 항상 동작.
+  - `POST /api/coach/summary` — 등록된 BYOK provider로 코치 브리핑 마크다운 생성 (선택).
+- `main.py`에 라우터 등록: `prefix="/api/coach"`.
+- 프론트 `pages/Coach.tsx` (182줄): CoachReport 표시 — score/grade/metrics 미터 + insights 카드 + headline. `react-markdown`으로 LLM 브리핑 렌더.
+- `App.tsx`에 `/coach` 라우팅 추가, `pages/Coach` import.
+- 사이드바 그룹명 **'Nova' → 'Agent'** 로 변경 (`constants/nav.ts`), `coach`(lightbulb) 항목 추가.
+- `pages/Misunderstandings.tsx`: 하단 EmptyState가 "코치 열기" 버튼으로 `/coach` 진입 (onNavigate prop).
+- `routers/projects.py`: `/structure` SaaS 모드 분기 — 사용자 로컬 디렉토리 스캔 불가 안내 메시지 + repoPath만 반환.
+
+**#6 docker-compose + nginx 운영 설정** ✅
+- `docker-compose.yml` (dev): postgres 서비스 추가 + healthcheck + `command: alembic upgrade head && uvicorn`.
+- `docker-compose.cloud.yml` (운영): **Caddy 제거 → nginx 도입** + certbot 옵션 프로파일.
+- `deploy/nginx/nova.conf`: `/api`/`/ws`/`/`(SPA) 분기, `X-Forwarded-Proto/Host` 전달, gzip, 보안 헤더, HTTPS 블록 주석 처리(certbot 발급 후 활성화).
+- `deploy/README.md`: 첫 배포·SSL·마이그레이션·백업 가이드.
+- `.env.example`: `DATABASE_URL`/`POSTGRES_*`/`AIOPS_PUBLIC_URL` 추가.
+
+### 검증
+
+- 전 모듈 import (10개) 통과
+- `npm run build` 통과 (1942 모듈, lint 0 error)
+- 백엔드 부팅 1초, `/api/mode` 정상 (`public_url=http://localhost:8000`)
+- SQLAlchemy `create_all`로 `assets` 포함 10개 테이블 자동 생성 (server/data/aiops_saas.db)
+- 가짜 자산 sync → `_load_assets` 정상 (DB→AssetEntry 변환 + content 채워짐)
+- `grep "sqlite3\.connect|aiosqlite\.connect"` → 0건
+
+### 다음 세션에 할 작업 (우선순위 순)
+
+**A. Coach 검증 + 확장 (방금 추가됨)**
+- `services/coach.py` 룰 정확도 점검 (실데이터로 score/grade가 합리적인지)
+- Coach 페이지 빈 상태(데이터 0건) UX, summary 호출 실패 시 사용자 친절도
+- BYOK 미등록 상태에서 summary 버튼 비활성화 처리 확인
+- 룰 추가 후보: "오해 패턴 상위 3개 → CLAUDE.md 룰 제안", "워크플로 단계 건너뜀 빈도"
+
+**B. 첫 Alembic 마이그레이션 생성 (운영 배포 전 필수)**
+- 로컬 PostgreSQL 띄움: `docker compose up -d postgres`
+- `cd server && DATABASE_URL=postgresql+asyncpg://nova:nova@localhost:5432/nova alembic revision --autogenerate -m "initial schema"`
+- 생성된 `alembic/versions/*.py` 검토 + commit. 이후 backend 컨테이너 시작 시 자동 upgrade.
+
+**C. RAG 챗봇 구현 (다음 Phase)**
+- 사이드바 `Chat` 페이지 자리(현재 ChatBot stub 비어있음)
+- DB가 PostgreSQL이라 **pgvector 확장** 자연스러움. `assets` 본문 → 청크 → 임베딩 → `pg_vector` 컬럼.
+- 신규 라우터 `/api/chat/{search,query}` — BYOK provider로 LLM 답변.
+- 의존성: pgvector 확장 (postgres image에 추가), `sentence-transformers` 또는 OpenAI embeddings API.
+
+**D. 보조 페이지 새 디자인 마이그레이션 (다크모드 미대응)**
+- `RepoMap.tsx` (274줄), `ClaudeConfig.tsx` (483줄), `OnboardingWizard.tsx` (521줄)
+- 현재 `constants/colors.ts`(hex) + 인라인 스타일 → ui/primitives + 토큰 기반으로
+- colors.ts 의존도 줄여 다크모드 일관성 확보
+
+**E. `useApi.handleUnauthorized()` 보수화 (false 401 방어)**
+- 현재: 401 시 무조건 localStorage 정리 + `window.location.reload()`
+- 개선: 토스트 + 1회 retry → 그래도 401이면 정리, reload 대신 `useAuth.logout()` (탭 상태 유지)
+
+**F. 정리/결정 필요**
+- `Caddyfile` — 더 이상 docker-compose에서 안 쓰임. 삭제? 보관?
+- Lemon Squeezy 결제 인프라 (saas-improvement-report Phase A)
+- 운영 배포 실행 (도메인 결정 후) — `deploy/README.md` 가이드대로
+- karpathy-guidelines 스킬 설치됨(`./.agents/skills/karpathy-guidelines`) — 다음 세션 코드 작성/리뷰 시 활용 권장
+
+### 주의사항
+
+- **dev 환경**: 사용자 `.env`에 `DATABASE_URL`이 없어 SQLite 폴백 (`server/data/aiops_saas.db`). 운영 배포 시 반드시 PostgreSQL.
+- **uvicorn graceful shutdown 멈춤**: lifespan의 watcher task cancel이 늦어 reload 시 종종 멈춤. `pkill -9 -f "uvicorn main:app"`로 강제 재시작 필요.
+- **secret_store/load_key는 모두 async**: 새 코드 작성 시 `await get_secret_plain(...)`, `await provider.require_key()` 잊지 말 것.
+- **SQLAlchemy upsert**: PG/SQLite 둘 다 `INSERT ... ON CONFLICT DO UPDATE`를 dialect별 `insert()`로 처리. 새 테이블 추가 시 `_asset_upsert()` 같은 헬퍼 패턴 참조.
+- **첫 alembic revision은 PG 켠 상태에서**: SQLite로 generate하면 PG와 SQL이 달라질 수 있음. 반드시 PostgreSQL을 켜고 `alembic revision --autogenerate`.
+
+### 관련 파일 (신규/변경)
+
+**백엔드 신규**
+- `server/models/db_models.py` (전 ORM 모델)
+- `server/services/database.py` (engine/session)
+- `server/routers/assets.py` (자산 sync API)
+- `server/routers/coach.py` + `server/services/coach.py` (Coach 가치 사슬 — 막판 추가)
+- `server/alembic.ini`, `server/alembic/{env.py,script.py.mako,versions/.keep}`
+- `deploy/nginx/nova.conf`, `deploy/README.md`
+
+**백엔드 변경**
+- `server/requirements.txt` (sqlalchemy/asyncpg/alembic 추가)
+- `server/services/db.py` (SQLAlchemy 재작성, 시그니처 유지)
+- `server/services/{secret_store,project_swap,misunderstanding_detector,claude_config_scanner,auth}.py` (async + SQLAlchemy)
+- `server/services/llm/{base,anthropic_provider,gemini_provider,openai_provider}.py` (load_key/require_key async)
+- `server/services/hermes/{catalog,wiki_builder,llm_client}.py` (catalog content 필드 + classify_asset public + load_anthropic_key async)
+- `server/routers/{auth,assets,hermes,repos,secrets,projects,scripts,health,claude_config}.py` (모두 SQLAlchemy)
+- `server/scripts/hooks/aiops-log-hook.sh` (.md 자동 sync)
+- `docker-compose.yml`, `docker-compose.cloud.yml`, `.env.example`
+
+**프론트엔드 신규/주요 변경**
+- `frontend/src/styles/{tokens.css,ui.css}`, `frontend/src/ui/{Icon.tsx,primitives.tsx,toast.tsx}`
+- `frontend/src/app/{AppShell.tsx,Sidebar.tsx,TopBar.tsx,CommandPalette.tsx}`
+- `frontend/src/pages/{Home,HookMonitor,Prompts,Misunderstandings,Agent,Connections,ProjectSwap,WorkflowTracker,Login,Coach}.tsx`
+- `frontend/src/App.tsx` (/coach 라우팅), `frontend/src/main.tsx`
+- `frontend/src/constants/nav.ts` ('Nova' → 'Agent' 그룹명 + coach 항목)
+- `frontend/vite.config.ts` (changeOrigin)
+- `frontend/src/brand-assets/{logo-mark,logo-wordmark}.svg`
+
+**참조 보관**
+- `frontend-new/` (frontend-design 산출물 — UI 키트 원본, 참조용)
+- `Caddyfile` (사용 안 함 — 삭제 여부 결정 대기)
+
+---
+
 ## 2026.05.27 — MVP 90% 마감 (발표 준비용)
 
 ### 한 줄 요약

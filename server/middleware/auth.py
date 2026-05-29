@@ -4,7 +4,7 @@
 local 모드: no-op (기본 tenant 반환)
 saas 모드: JWT 토큰 검증 + tenant_id 추출
 """
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Depends
 from services.auth import verify_jwt
 from services.log_store import AIOPS_MODE, LOCAL_TENANT
 
@@ -24,3 +24,11 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="유효하지 않거나 만료된 토큰입니다")
 
     return payload
+
+
+async def require_premium(user: dict = Depends(get_current_user)) -> dict:
+    """프리미엄(Pro) 전용 라우트 게이팅. 비프리미엄이면 402."""
+    from services.billing import is_premium
+    if not await is_premium(user["tenant_id"]):
+        raise HTTPException(status_code=402, detail="프리미엄(Pro) 구독이 필요한 기능입니다.")
+    return user

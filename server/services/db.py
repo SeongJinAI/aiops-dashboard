@@ -1,170 +1,120 @@
-"""
-SQLite 데이터베이스 — SaaS 모드용 로그 저장/조회
-local 모드에서는 사용하지 않는다.
+"""DB CRUD 함수 — SQLAlchemy + PostgreSQL/SQLite.
+
+기존 인터페이스를 유지: 라우터들이 `from services.db import insert_log, ...`
+그대로 동작한다. 내부만 raw sqlite3/aiosqlite → SQLAlchemy ORM/Core로 교체.
+
+- 엔진/세션: services.database 모듈
+- upsert: PostgreSQL/SQLite 모두 `INSERT ... ON CONFLICT ... DO UPDATE` 지원 → dialect별 insert() 사용
+- 기존 호환을 위해 DB_PATH 상수는 services.database.DATABASE_URL과 별개로 유지
 """
 import json
-import aiosqlite
 import os
 from datetime import date, timedelta
 from pathlib import Path
 
+from sqlalchemy import select
+
+from models.db_models import Asset, Log
+from services.database import engine, init_db, session_scope
+
+
+# ─── 기존 호환: 일부 라우터가 from services.db import DB_PATH 사용 ────────────
 DB_PATH = Path(os.getenv("DB_PATH", os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "aiops.db"
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "aiops.db",
 )))
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS tenants (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    api_key_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
-);
 
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id),
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL,
-    category TEXT NOT NULL,
-    ts TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_logs_tenant_cat_ts
-    ON logs(tenant_id, category, ts DESC);
-
-CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    url TEXT DEFAULT '',
-    domain TEXT DEFAULT '',
-    repo_path TEXT DEFAULT '',
-    status TEXT DEFAULT 'ready',
-    UNIQUE(tenant_id, name)
-);
-
--- Hermes Agent: 프로젝트 위키 자동 생성기
-CREATE TABLE IF NOT EXISTS hermes_wikis (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id    TEXT NOT NULL,
-    project_name TEXT NOT NULL,
-    perspective  TEXT NOT NULL,   -- 'planner' | 'developer' | 'user'
-    content      TEXT NOT NULL,
-    version      INTEGER DEFAULT 1,
-    updated_at   TEXT DEFAULT (datetime('now')),
-    UNIQUE(tenant_id, project_name, perspective, version)
-);
-
-CREATE INDEX IF NOT EXISTS idx_hermes_wikis_lookup
-    ON hermes_wikis(tenant_id, project_name, perspective, version DESC);
-
-CREATE TABLE IF NOT EXISTS hermes_wiki_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id    TEXT NOT NULL,
-    project_name TEXT NOT NULL,
-    status       TEXT NOT NULL,   -- 'running' | 'success' | 'failed'
-    started_at   TEXT DEFAULT (datetime('now')),
-    finished_at  TEXT,
-    input_count  INTEGER DEFAULT 0,
-    output_chars INTEGER DEFAULT 0,
-    error        TEXT,
-    diff_summary TEXT
-);
-
--- 사용자별 외부 API 키 (BYOK) — 평문 X, AES-GCM 암호화 후 저장
-CREATE TABLE IF NOT EXISTS tenant_secrets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id   TEXT NOT NULL,
-    kind        TEXT NOT NULL,   -- 'anthropic' | (향후) 'openai' | 'github' ...
-    ciphertext  TEXT NOT NULL,   -- base64(nonce + AES-GCM ciphertext)
-    preview     TEXT,            -- 마스킹된 미리보기 ('sk-ant-...***xyz')
-    created_at  TEXT DEFAULT (datetime('now')),
-    last_used_at TEXT,
-    UNIQUE(tenant_id, kind)
-);
-
-CREATE TABLE IF NOT EXISTS hermes_souls (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id    TEXT NOT NULL,
-    project_name TEXT NOT NULL,
-    soul         TEXT,
-    updated_at   TEXT DEFAULT (datetime('now')),
-    UNIQUE(tenant_id, project_name)
-);
-"""
-
-_SYSTEM_PREFIXES = ("<task-notification>", "<system-reminder>", "<command-name>", "<local-command")
+__all__ = [
+    "DB_PATH",
+    "init_db",  # services.database.init_db를 re-export
+    "insert_log",
+    "insert_logs_batch",
+    "query_logs",
+    "query_logs_by_date",
+    "compute_prompt_stats",
+    "compute_hook_stats",
+    "compute_misunderstanding_stats",
+    "upsert_asset",
+    "upsert_assets_batch",
+    "list_assets",
+    "delete_asset",
+]
 
 
-async def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        await conn.executescript(_SCHEMA)
-        await conn.execute("PRAGMA journal_mode=WAL")
-        await conn.commit()
+_SYSTEM_PREFIXES = (
+    "<task-notification>", "<system-reminder>", "<command-name>", "<local-command",
+)
 
 
-async def _get_conn() -> aiosqlite.Connection:
-    return await aiosqlite.connect(str(DB_PATH))
+# ─── Logs ────────────────────────────────────────────────────────────────────
 
 
-async def insert_log(tenant_id: str, category: str, payload: dict):
+async def insert_log(tenant_id: str, category: str, payload: dict) -> None:
     ts = payload.get("ts", "")
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        await conn.execute(
-            "INSERT INTO logs (tenant_id, category, ts, payload) VALUES (?, ?, ?, ?)",
-            (tenant_id, category, ts, json.dumps(payload, ensure_ascii=False)),
-        )
-        await conn.commit()
+    async with session_scope() as s:
+        s.add(Log(
+            tenant_id=tenant_id,
+            category=category,
+            ts=ts,
+            payload=json.dumps(payload, ensure_ascii=False),
+        ))
 
 
-async def insert_logs_batch(tenant_id: str, logs: list[dict]):
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        await conn.executemany(
-            "INSERT INTO logs (tenant_id, category, ts, payload) VALUES (?, ?, ?, ?)",
-            [
-                (tenant_id, log["category"], log["payload"].get("ts", ""),
-                 json.dumps(log["payload"], ensure_ascii=False))
-                for log in logs
-            ],
+async def insert_logs_batch(tenant_id: str, logs: list[dict]) -> None:
+    if not logs:
+        return
+    rows = [
+        Log(
+            tenant_id=tenant_id,
+            category=log["category"],
+            ts=log["payload"].get("ts", ""),
+            payload=json.dumps(log["payload"], ensure_ascii=False),
         )
-        await conn.commit()
+        for log in logs
+    ]
+    async with session_scope() as s:
+        s.add_all(rows)
 
 
 async def query_logs(
-    tenant_id: str, category: str, days: int = 7, limit: int = 100
+    tenant_id: str, category: str, days: int = 7, limit: int = 100,
 ) -> list[dict]:
     since = (date.today() - timedelta(days=days)).isoformat()
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT payload FROM logs WHERE tenant_id = ? AND category = ? AND ts >= ? ORDER BY ts DESC LIMIT ?",
-            (tenant_id, category, since, limit),
+    stmt = (
+        select(Log.payload)
+        .where(
+            Log.tenant_id == tenant_id,
+            Log.category == category,
+            Log.ts >= since,
         )
-        rows = await cursor.fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+        .order_by(Log.ts.desc())
+        .limit(limit)
+    )
+    async with session_scope() as s:
+        rows = (await s.execute(stmt)).scalars().all()
+    return [json.loads(p) for p in rows]
 
 
 async def query_logs_by_date(
-    tenant_id: str, category: str, target_date: str
+    tenant_id: str, category: str, target_date: str,
 ) -> list[dict]:
-    next_date = str(date.fromisoformat(target_date) + timedelta(days=1))
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT payload FROM logs WHERE tenant_id = ? AND category = ? AND ts >= ? AND ts < ? ORDER BY ts",
-            (tenant_id, category, target_date, next_date),
+    next_date = (date.fromisoformat(target_date) + timedelta(days=1)).isoformat()
+    stmt = (
+        select(Log.payload)
+        .where(
+            Log.tenant_id == tenant_id,
+            Log.category == category,
+            Log.ts >= target_date,
+            Log.ts < next_date,
         )
-        rows = await cursor.fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+        .order_by(Log.ts)
+    )
+    async with session_scope() as s:
+        rows = (await s.execute(stmt)).scalars().all()
+    return [json.loads(p) for p in rows]
+
+
+# ─── Stats — query_logs 위에서 동작, raw SQL 없음 (그대로 옮김) ──────────────
 
 
 async def compute_prompt_stats(tenant_id: str) -> dict:
@@ -183,14 +133,14 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
     for p in user_prompts:
         repo = p.get("repo", "unknown")
         repo_counts[repo] = repo_counts.get(repo, 0) + 1
+    by_repo = sorted(
+        [{"repo": k, "cnt": v} for k, v in repo_counts.items()],
+        key=lambda x: -x["cnt"],
+    )
 
-    by_repo = sorted([{"repo": k, "cnt": v} for k, v in repo_counts.items()], key=lambda x: -x["cnt"])
-
-    # 시간대별 분포 (0-23시) — 사용자 프롬프트만
     hourly = [0] * 24
     for p in user_prompts:
         ts = p.get("ts", "")
-        # ISO8601 의 시간 부분 추출 (YYYY-MM-DDTHH:MM:SS...)
         if len(ts) >= 13 and ts[10] in ("T", " "):
             try:
                 h = int(ts[11:13])
@@ -199,7 +149,6 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
             except ValueError:
                 pass
 
-    # 일별 추세 — 최근 30일 (오래된→최신 순)
     days_window = 30
     today_date = date.today()
     daily_counts: dict[str, int] = {}
@@ -212,8 +161,6 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
             daily_counts[ts] += 1
     daily = [{"date": d, "cnt": c} for d, c in daily_counts.items()]
 
-    # 토큰 길이 분포
-    # 버킷: 0-100 / 100-300 / 300-1000 / 1000-3000 / 3000+
     length_buckets = [
         {"label": "≤100", "max": 100, "cnt": 0},
         {"label": "100-300", "max": 300, "cnt": 0},
@@ -244,12 +191,10 @@ async def compute_prompt_stats(tenant_id: str) -> dict:
 
 async def compute_hook_stats(tenant_id: str) -> dict:
     all_hooks = await query_logs(tenant_id, "hooks", days=30, limit=10000)
-
     total = len(all_hooks)
     success = sum(1 for h in all_hooks if h.get("exit", -1) == 0)
     failed = total - success
     success_rate = round(success / total * 100, 1) if total > 0 else 0
-
     return {
         "total": total,
         "success": success,
@@ -269,11 +214,104 @@ async def compute_misunderstanding_stats(tenant_id: str) -> dict:
     for m in all_logs:
         p = m.get("pattern", "unknown")
         pattern_counts[p] = pattern_counts.get(p, 0) + 1
+    by_pattern = sorted(
+        [{"pattern": k, "cnt": v} for k, v in pattern_counts.items()],
+        key=lambda x: -x["cnt"],
+    )
 
-    by_pattern = sorted([{"pattern": k, "cnt": v} for k, v in pattern_counts.items()], key=lambda x: -x["cnt"])
+    return {"total": total, "today": today_count, "byPattern": by_pattern}
 
-    return {
-        "total": total,
-        "today": today_count,
-        "byPattern": by_pattern,
-    }
+
+# ─── Assets — dialect별 upsert ────────────────────────────────────────────────
+
+
+def _asset_upsert(values: list[dict]):
+    """dialect별 INSERT ... ON CONFLICT DO UPDATE 문 생성.
+    PostgreSQL/SQLite 모두 (tenant_id, project_name, path) UNIQUE에 대응."""
+    update_cols = ("perspective", "bucket", "content", "size_bytes", "modified_at")
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _ins
+    else:
+        from sqlalchemy.dialects.sqlite import insert as _ins
+    stmt = _ins(Asset).values(values)
+    set_ = {c: getattr(stmt.excluded, c) for c in update_cols}
+    return stmt.on_conflict_do_update(
+        index_elements=[Asset.tenant_id, Asset.project_name, Asset.path],
+        set_=set_,
+    )
+
+
+async def upsert_asset(
+    tenant_id: str,
+    project_name: str,
+    path: str,
+    content: str,
+    size_bytes: int = 0,
+    modified_at: str | None = None,
+    perspective: str | None = None,
+    bucket: str | None = None,
+) -> None:
+    stmt = _asset_upsert([{
+        "tenant_id": tenant_id, "project_name": project_name, "path": path,
+        "perspective": perspective, "bucket": bucket,
+        "content": content, "size_bytes": size_bytes, "modified_at": modified_at,
+    }])
+    async with session_scope() as s:
+        await s.execute(stmt)
+
+
+async def upsert_assets_batch(
+    tenant_id: str,
+    project_name: str,
+    items: list[dict],
+) -> int:
+    if not items:
+        return 0
+    values = [
+        {
+            "tenant_id": tenant_id,
+            "project_name": project_name,
+            "path": it["path"],
+            "perspective": it.get("perspective"),
+            "bucket": it.get("bucket"),
+            "content": it.get("content", ""),
+            "size_bytes": it.get("size_bytes", 0),
+            "modified_at": it.get("modified_at"),
+        }
+        for it in items
+    ]
+    stmt = _asset_upsert(values)
+    async with session_scope() as s:
+        await s.execute(stmt)
+    return len(values)
+
+
+async def list_assets(tenant_id: str, project_name: str) -> list[dict]:
+    stmt = (
+        select(
+            Asset.path, Asset.perspective, Asset.bucket,
+            Asset.content, Asset.size_bytes, Asset.modified_at,
+        )
+        .where(Asset.tenant_id == tenant_id, Asset.project_name == project_name)
+        .order_by(Asset.path)
+    )
+    async with session_scope() as s:
+        rows = (await s.execute(stmt)).all()
+    return [
+        {
+            "path": r.path, "perspective": r.perspective, "bucket": r.bucket,
+            "content": r.content, "size_bytes": r.size_bytes, "modified_at": r.modified_at,
+        }
+        for r in rows
+    ]
+
+
+async def delete_asset(tenant_id: str, project_name: str, path: str) -> None:
+    from sqlalchemy import delete as _delete
+    stmt = _delete(Asset).where(
+        Asset.tenant_id == tenant_id,
+        Asset.project_name == project_name,
+        Asset.path == path,
+    )
+    async with session_scope() as s:
+        await s.execute(stmt)

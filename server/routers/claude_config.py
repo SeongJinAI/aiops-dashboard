@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/project")
 async def project_config(user: dict = Depends(get_current_user)):
     """활성 프로젝트의 Claude 설정 반환."""
-    return scan_project_config(tenant_id=user.get("tenant_id"))
+    return await scan_project_config(tenant_id=user.get("tenant_id"))
 
 
 @router.get("/global")
@@ -24,6 +24,6 @@ async def global_config(user: dict = Depends(get_current_user)):
 async def all_config(user: dict = Depends(get_current_user)):
     """프로젝트 + 글로벌 설정을 한번에 반환."""
     return {
-        "project": scan_project_config(tenant_id=user.get("tenant_id")),
+        "project": await scan_project_config(tenant_id=user.get("tenant_id")),
         "global": scan_global_config(),
     }

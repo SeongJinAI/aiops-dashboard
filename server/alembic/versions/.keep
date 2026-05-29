@@ -1,0 +1,7 @@
+# 이 디렉토리는 Alembic 마이그레이션 파일이 들어가는 위치다.
+# 첫 마이그레이션 생성:
+#   cd server && alembic revision --autogenerate -m "initial schema"
+# 적용:
+#   alembic upgrade head
+#
+# 운영 배포 시 docker-compose가 backend 컨테이너에서 자동 실행하도록 entrypoint에 추가 가능.

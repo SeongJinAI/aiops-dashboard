@@ -1,0 +1,106 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .label {
+    width: 80px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 18px;
+    padding: 0 7px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--r-sm);
+    line-height: 1;
+  }
+
+  .chip.dot::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: currentColor;
+  }
+
+  .chip.success { background: var(--success-soft); color: var(--success); }
+  .chip.warning { background: var(--warning-soft); color: var(--warning); }
+  .chip.danger  { background: var(--danger-soft);  color: var(--danger); }
+  .chip.info    { background: var(--info-soft);    color: var(--info); }
+  .chip.neutral { background: var(--surface-alt);  color: var(--text-dim); }
+  .chip.accent  { background: var(--accent-soft);  color: var(--accent-soft-fg); }
+  .chip.purple  { background: var(--purple-soft);  color: var(--purple); }
+  .chip.cyan    { background: var(--cyan-soft);    color: var(--cyan); }
+
+  .chip.delta {
+    background: transparent;
+    color: var(--success);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 0 4px;
+  }
+  .chip.delta.dn { color: var(--danger); }
+
+  .badge-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--r-full);
+    background: var(--surface-alt);
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="row">
+    <div class="label">status</div>
+    <span class="chip success dot">running</span>
+    <span class="chip warning dot">retrying</span>
+    <span class="chip danger dot">failed</span>
+    <span class="chip info dot">queued</span>
+    <span class="chip neutral dot">idle</span>
+  </div>
+  <div class="row">
+    <div class="label">perspective</div>
+    <span class="chip purple">기획자</span>
+    <span class="chip accent">개발자</span>
+    <span class="chip cyan">사용자</span>
+  </div>
+  <div class="row">
+    <div class="label">delta</div>
+    <span class="chip delta">+12%</span>
+    <span class="chip delta">+4.3%</span>
+    <span class="chip delta dn">−18%</span>
+    <span class="chip delta dn">−2.1%</span>
+  </div>
+  <div class="row">
+    <div class="label">count</div>
+    <span class="badge-count">3</span>
+    <span class="badge-count">12</span>
+    <span class="badge-count">247</span>
+    <span class="badge-count" style="background: var(--accent); color: white;">9</span>
+  </div>
+</div>
+</body>
+</html>

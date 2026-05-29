@@ -1,0 +1,74 @@
+<!-- @dsCard group="Spacing" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .label {
+    width: 70px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .bar {
+    height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .num {
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+  .group {
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px 12px;
+  }
+  .group .gtitle {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="modes">
+    <div class="group" data-density="compact">
+      <div class="gtitle">COMPACT · default</div>
+      <div class="row"><div class="label">xs</div><div class="bar" style="width: var(--s-xs);"></div><div class="num">3px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">sm</div><div class="bar" style="width: var(--s-sm);"></div><div class="num">6px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">md</div><div class="bar" style="width: var(--s-md);"></div><div class="num">9px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">lg</div><div class="bar" style="width: var(--s-lg);"></div><div class="num">12px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xl</div><div class="bar" style="width: var(--s-xl);"></div><div class="num">18px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xxl</div><div class="bar" style="width: var(--s-xxl);"></div><div class="num">24px</div></div>
+    </div>
+    <div class="group" data-density="normal">
+      <div class="gtitle">NORMAL</div>
+      <div class="row"><div class="label">xs</div><div class="bar" style="width: var(--s-xs);"></div><div class="num">4px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">sm</div><div class="bar" style="width: var(--s-sm);"></div><div class="num">8px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">md</div><div class="bar" style="width: var(--s-md);"></div><div class="num">12px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">lg</div><div class="bar" style="width: var(--s-lg);"></div><div class="num">16px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xl</div><div class="bar" style="width: var(--s-xl);"></div><div class="num">24px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xxl</div><div class="bar" style="width: var(--s-xxl);"></div><div class="num">32px</div></div>
+    </div>
+    <div class="group" data-density="roomy">
+      <div class="gtitle">ROOMY</div>
+      <div class="row"><div class="label">xs</div><div class="bar" style="width: var(--s-xs);"></div><div class="num">5px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">sm</div><div class="bar" style="width: var(--s-sm);"></div><div class="num">10px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">md</div><div class="bar" style="width: var(--s-md);"></div><div class="num">15px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">lg</div><div class="bar" style="width: var(--s-lg);"></div><div class="num">20px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xl</div><div class="bar" style="width: var(--s-xl);"></div><div class="num">30px</div></div>
+      <div class="row" style="margin-top:6px"><div class="label">xxl</div><div class="bar" style="width: var(--s-xxl);"></div><div class="num">40px</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

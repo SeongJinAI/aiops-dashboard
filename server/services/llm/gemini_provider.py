@@ -50,7 +50,7 @@ class GeminiProvider(LLMProvider):
         max_tokens: int = 8000,
         on_retry: OnRetryCallback | None = None,
     ) -> str:
-        key = self.require_key()
+        key = await self.require_key()
         try:
             from google import genai  # type: ignore
             from google.genai import types  # type: ignore

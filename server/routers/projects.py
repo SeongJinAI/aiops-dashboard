@@ -16,6 +16,9 @@ from services.rate_limit import limiter
 router = APIRouter()
 
 
+# 빈 path + slash 둘 다 등록 — slash 없이 호출 시 307 redirect 후
+# Authorization 헤더가 드롭되어 401이 발생하는 트랩 방지 (secrets 라우터와 동일 패턴).
+@router.get("")
 @router.get("/")
 async def list_projects(user: dict = Depends(get_current_user)):
     if AIOPS_MODE == "saas":
@@ -52,7 +55,7 @@ async def project_structure(user: dict = Depends(get_current_user)):
             "exists": False,
             "saasMode": True,
             "message": "SaaS 모드에서는 사용자 로컬 디렉토리 구조를 서버가 직접 스캔할 수 없습니다. "
-                       "Hermes 자산 카탈로그(에이전트 탭)에서 .md 자산 분류를 확인하세요.",
+                       "자산 카탈로그(에이전트 탭)에서 .md 자산 분류를 확인하세요.",
         }
 
     project = get_active_project()

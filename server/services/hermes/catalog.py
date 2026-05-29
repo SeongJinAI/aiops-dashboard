@@ -35,6 +35,9 @@ class AssetEntry:
     size_bytes: int
     preview: str         # 앞쪽 미리보기 텍스트
     bucket: str          # 분류 버킷 라벨 (UI 그룹핑용)
+    # SaaS 모드에서는 DB에서 미리 로드된 본문이 들어온다.
+    # local 모드에서는 None — wiki_builder가 파일에서 직접 읽는다.
+    content: str | None = None
 
 
 def _classify(rel_path: str, filename: str) -> tuple[Perspective, str]:
@@ -124,6 +127,13 @@ def _classify(rel_path: str, filename: str) -> tuple[Perspective, str]:
 
     # 7) 기본값
     return "developer", "misc"
+
+
+def classify_asset(rel_path: str, filename: str) -> tuple[str, str]:
+    """경로/파일명으로 (perspective, bucket) 결정 — public alias.
+    ingest 시점에 perspective를 미리 박아두기 위해 외부에서 호출한다.
+    """
+    return _classify(rel_path, filename)
 
 
 def _preview(path: Path, max_chars: int = PREVIEW_CHARS) -> str:

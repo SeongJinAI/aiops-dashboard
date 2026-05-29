@@ -1,10 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko" data-theme="light" data-density="compact">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Nova — AI 협업 학습 대시보드</title>
+    <script>
+      // FOUC 방지: 저장된 테마/밀도를 React 마운트 전에 적용
+      (function () {
+        try {
+          var t = localStorage.getItem('nova.theme');
+          var d = localStorage.getItem('nova.density');
+          if (t) document.documentElement.setAttribute('data-theme', t);
+          if (d) document.documentElement.setAttribute('data-density', d);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

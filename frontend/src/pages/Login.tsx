@@ -1,20 +1,24 @@
-import { useState } from 'react';
-import { C } from '../constants/colors';
+// 로그인/회원가입 — 인증 진입점. onLogin/onRegister 로직 보존, 새 디자인.
+import { useState, type FormEvent } from 'react';
+import logoMark from '../brand-assets/logo-mark.svg';
+import { Btn } from '../ui/primitives';
 
 interface Props {
   onLogin: (email: string, password: string) => Promise<void>;
   onRegister: (tenantName: string, email: string, password: string) => Promise<{ apiKey: string }>;
+  initialMode?: 'login' | 'register';
+  onBack?: () => void;
 }
 
-export function Login({ onLogin, onRegister }: Props) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+export function Login({ onLogin, onRegister, initialMode = 'login', onBack }: Props) {
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [tenantName, setTenantName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -23,7 +27,6 @@ export function Login({ onLogin, onRegister }: Props) {
         await onLogin(email, password);
       } else {
         const { apiKey } = await onRegister(tenantName, email, password);
-        // API 키는 일회성 노출 — 연결 설정 페이지에서 보여준 후 즉시 삭제
         sessionStorage.setItem('aiops_new_api_key', apiKey);
       }
     } catch (err) {
@@ -34,92 +37,53 @@ export function Login({ onLogin, onRegister }: Props) {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: C.bg, fontFamily: "'Pretendard', sans-serif",
-    }}>
-      <div style={{
-        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-        padding: 40, width: 400, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-      }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: C.text }}>
-          AI OPS Dashboard
-        </h1>
-        <p style={{ color: C.dim, fontSize: 14, marginBottom: 28 }}>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <img src={logoMark} alt="" />
+          <span className="auth-title">Nova</span>
+        </div>
+        <p className="auth-sub">
           {mode === 'login' ? '로그인하여 대시보드에 접속하세요' : '새 팀을 등록하세요'}
         </p>
 
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: C.text }}>
-                팀 이름
-              </label>
-              <input
-                value={tenantName} onChange={e => setTenantName(e.target.value)}
-                placeholder="예: 개발팀"
-                required
-                style={{
-                  width: '100%', padding: '10px 12px', border: `1px solid ${C.border}`,
-                  borderRadius: 8, fontSize: 14, color: C.text, background: C.surface,
-                }}
-              />
+            <div className="auth-field">
+              <label htmlFor="tenant">팀 이름</label>
+              <input id="tenant" className="input" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="예: 개발팀" required />
             </div>
           )}
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: C.text }}>
-              이메일
-            </label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              required
-              style={{
-                width: '100%', padding: '10px 12px', border: `1px solid ${C.border}`,
-                borderRadius: 8, fontSize: 14, color: C.text, background: C.surface,
-              }}
-            />
+          <div className="auth-field">
+            <label htmlFor="email">이메일</label>
+            <input id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" required />
           </div>
 
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: C.text }}>
-              비밀번호
-            </label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="비밀번호 입력"
-              required
-              style={{
-                width: '100%', padding: '10px 12px', border: `1px solid ${C.border}`,
-                borderRadius: 8, fontSize: 14, color: C.text, background: C.surface,
-              }}
-            />
+          <div className="auth-field">
+            <label htmlFor="password">비밀번호</label>
+            <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 입력" required />
           </div>
 
-          {error && (
-            <p style={{ color: C.red, fontSize: 13, marginBottom: 16 }}>{error}</p>
-          )}
+          {error && <p className="text-danger" style={{ fontSize: 12, margin: '4px 0 12px' }}>{error}</p>}
 
-          <button
-            type="submit" disabled={loading}
-            style={{
-              width: '100%', padding: '12px 0', background: C.accent, color: '#fff',
-              border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600,
-              cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1,
-            }}
-          >
-            {loading ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
-          </button>
+          <Btn variant="primary" type="submit" disabled={loading} className="btn-block">
+            {loading ? '처리 중…' : mode === 'login' ? '로그인' : '회원가입'}
+          </Btn>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: C.dim }}>
+        <p className="auth-foot">
           {mode === 'login' ? (
-            <>계정이 없나요? <span onClick={() => setMode('register')} style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}>회원가입</span></>
+            <>계정이 없나요? <button className="link-btn" onClick={() => setMode('register')} type="button">회원가입</button></>
           ) : (
-            <>이미 계정이 있나요? <span onClick={() => setMode('login')} style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}>로그인</span></>
+            <>이미 계정이 있나요? <button className="link-btn" onClick={() => setMode('login')} type="button">로그인</button></>
           )}
         </p>
+        {onBack && (
+          <p className="auth-foot">
+            <button className="link-btn" onClick={onBack} type="button">← 소개 페이지로</button>
+          </p>
+        )}
       </div>
     </div>
   );

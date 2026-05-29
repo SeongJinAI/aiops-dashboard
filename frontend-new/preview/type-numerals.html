@@ -1,0 +1,51 @@
+<!-- @dsCard group="Type" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 14px; }
+  .heading {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 8px 10px;
+  }
+  .stat .lab { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .num {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat.bad .num { font-variant-numeric: proportional-nums; }
+  .stat .note { font-size: 10px; color: var(--text-faint); margin-top: 2px; font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div>
+    <div class="heading">TABULAR — numbers align across rows</div>
+    <div class="stats">
+      <div class="stat"><div class="lab">prompts</div><div class="num">3,124</div><div class="note">tabular-nums</div></div>
+      <div class="stat"><div class="lab">hooks</div><div class="num">11,108</div><div class="note">tabular-nums</div></div>
+      <div class="stat"><div class="lab">tokens</div><div class="num">98,471</div><div class="note">tabular-nums</div></div>
+    </div>
+  </div>
+  <div>
+    <div class="heading">PROPORTIONAL (forbidden in stat cards)</div>
+    <div class="stats">
+      <div class="stat bad"><div class="lab">prompts</div><div class="num">3,124</div><div class="note">jitters on refresh</div></div>
+      <div class="stat bad"><div class="lab">hooks</div><div class="num">11,108</div><div class="note">jitters on refresh</div></div>
+      <div class="stat bad"><div class="lab">tokens</div><div class="num">98,471</div><div class="note">jitters on refresh</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

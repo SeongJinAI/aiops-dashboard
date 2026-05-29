@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nova}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nova}
+      POSTGRES_DB: ${POSTGRES_DB:-nova}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nova} -d ${POSTGRES_DB:-nova}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build: ./server
     ports:
@@ -7,8 +24,16 @@ services:
       - ./data:/app/data
       - ${PROJECT_DIR:-.}/.aiops:/watch/.aiops:ro
     environment:
-      - PROJECTS_FILE=/app/data/projects.json
-      - LOG_DIR=/watch/.aiops
+      PROJECTS_FILE: /app/data/projects.json
+      LOG_DIR: /watch/.aiops
+      # SQLAlchemy URL — postgres 컨테이너를 가리킴
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nova}:${POSTGRES_PASSWORD:-nova}@postgres:5432/${POSTGRES_DB:-nova}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # alembic upgrade를 entrypoint에서 자동 실행 후 uvicorn
+    command: >
+      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
 
   frontend:
@@ -18,3 +43,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  postgres-data:

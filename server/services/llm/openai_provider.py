@@ -52,7 +52,7 @@ class OpenAIProvider(LLMProvider):
         max_tokens: int = 8000,
         on_retry: OnRetryCallback | None = None,
     ) -> str:
-        key = self.require_key()
+        key = await self.require_key()
         from openai import AsyncOpenAI  # type: ignore
 
         client = AsyncOpenAI(api_key=key)

@@ -64,7 +64,7 @@ async def get_all_status(user: dict = Depends(get_current_user)):
     """tenant의 모든 provider 등록 상태 — 드롭다운 채우기용."""
     out = []
     for kind in PROVIDER_NAMES:
-        st = get_secret_status(user["tenant_id"], kind)
+        st = await get_secret_status(user["tenant_id"], kind)
         out.append({"kind": kind, **st})
     return out
 
@@ -72,7 +72,7 @@ async def get_all_status(user: dict = Depends(get_current_user)):
 @router.get("/{kind}")
 async def provider_status(kind: str, user: dict = Depends(get_current_user)):
     kind = _check_kind(kind)
-    return get_secret_status(user["tenant_id"], kind)
+    return await get_secret_status(user["tenant_id"], kind)
 
 
 @router.post("/{kind}", response_model=RegisterResponse)
@@ -99,7 +99,7 @@ async def provider_register(
         verified = True
         message = msg
 
-    result = store_secret(user["tenant_id"], kind, plain)
+    result = await store_secret(user["tenant_id"], kind, plain)
     plain = ""
     req.key = ""
 
@@ -114,5 +114,5 @@ async def provider_register(
 @router.delete("/{kind}")
 async def provider_delete(kind: str, user: dict = Depends(get_current_user)):
     kind = _check_kind(kind)
-    removed = delete_secret(user["tenant_id"], kind)
+    removed = await delete_secret(user["tenant_id"], kind)
     return {"removed": removed}

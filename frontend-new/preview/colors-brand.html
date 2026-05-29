@@ -1,0 +1,70 @@
+<!-- @dsCard group="Colors" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .sw {
+    width: 64px; height: 40px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .meta { display: flex; flex-direction: column; gap: 2px; }
+  .meta .name { font-size: 12px; font-weight: 600; }
+  .meta .desc { font-size: 11px; color: var(--text-dim); }
+  .chips { display: flex; gap: 6px; margin-left: auto; }
+  .chip {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 3px 6px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .chip.solid { color: white; border: 1px solid transparent; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="stack">
+    <div class="row">
+      <div class="sw" style="background: var(--accent);"></div>
+      <div class="meta">
+        <div class="name">accent · indigo</div>
+        <div class="desc">primary actions, active tab, focus</div>
+      </div>
+      <div class="chips">
+        <div class="chip solid" style="background: var(--accent);">600</div>
+        <div class="chip" style="background: var(--accent-soft); color: var(--accent-soft-fg); border-color: transparent;">soft</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="sw" style="background: var(--purple);"></div>
+      <div class="meta">
+        <div class="name">purple · violet</div>
+        <div class="desc">planner perspective (Nova wiki)</div>
+      </div>
+      <div class="chips">
+        <div class="chip solid" style="background: var(--purple);">600</div>
+        <div class="chip" style="background: var(--purple-soft); color: var(--purple); border-color: transparent;">soft</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="sw" style="background: var(--cyan);"></div>
+      <div class="meta">
+        <div class="name">cyan</div>
+        <div class="desc">user perspective, secondary differentiation</div>
+      </div>
+      <div class="chips">
+        <div class="chip solid" style="background: var(--cyan);">600</div>
+        <div class="chip" style="background: var(--cyan-soft); color: var(--cyan); border-color: transparent;">soft</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

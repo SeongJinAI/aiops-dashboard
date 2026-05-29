@@ -166,26 +166,27 @@ def _extract_plugins(settings: dict | None) -> list[str]:
     return settings.get("enabledPlugins", [])
 
 
-def scan_project_config(tenant_id: str | None = None) -> dict:
+async def scan_project_config(tenant_id: str | None = None) -> dict:
     """활성 프로젝트 레포의 Claude 설정을 스캔한다.
 
     Local 모드: PROJECT_REPO env 우선
-    SaaS 모드: 해당 tenant의 활성 프로젝트 repoPath를 sqlite에서 sync 조회
+    SaaS 모드: tenant의 활성 프로젝트 repoPath를 SQLAlchemy로 조회 (서버에서 실제 파일은
+              사용자 PC에 있어 보통 의미 없음 — 자산 sync를 통한 DB 자산이 정식 경로)
     """
     repo = PROJECT_REPO
     if AIOPS_MODE == "saas" and tenant_id:
         try:
-            import sqlite3
-            from services.db import DB_PATH
-            conn = sqlite3.connect(str(DB_PATH))
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT repo_path FROM projects WHERE tenant_id = ? AND status = 'active' LIMIT 1",
-                (tenant_id,),
-            ).fetchone()
-            conn.close()
-            if row and row["repo_path"]:
-                repo = row["repo_path"]
+            from sqlalchemy import select
+            from models.db_models import Project
+            from services.database import session_scope
+            async with session_scope() as s:
+                rp = (await s.execute(
+                    select(Project.repo_path)
+                    .where(Project.tenant_id == tenant_id, Project.status == "active")
+                    .limit(1)
+                )).scalar_one_or_none()
+            if rp:
+                repo = rp
         except Exception:
             pass
 

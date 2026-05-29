@@ -1,0 +1,96 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .lab {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+  }
+  .num {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+  .delta {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+  }
+  .up { color: var(--success); }
+  .dn { color: var(--danger); }
+  .sub { font-size: 10.5px; color: var(--text-faint); }
+  .ico {
+    width: 14px; height: 14px;
+    color: var(--text-faint);
+  }
+  svg.spark { display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div class="stat">
+    <div class="top">
+      <div class="lab">PROMPTS (24h)</div>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <div class="num">3,124</div>
+    <svg class="spark" width="100%" height="22" viewBox="0 0 120 22" preserveAspectRatio="none">
+      <polyline fill="none" stroke="oklch(0.50 0.20 270)" stroke-width="1.5"
+        points="0,15 12,14 24,10 36,12 48,8 60,9 72,5 84,7 96,4 108,3 120,2"/>
+    </svg>
+    <div class="bottom"><span class="delta up">+12%</span><span class="sub">vs prev 24h</span></div>
+  </div>
+
+  <div class="stat">
+    <div class="top">
+      <div class="lab">HOOKS FIRED</div>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </div>
+    <div class="num">847</div>
+    <svg class="spark" width="100%" height="22" viewBox="0 0 120 22" preserveAspectRatio="none">
+      <polyline fill="none" stroke="oklch(0.50 0.20 270)" stroke-width="1.5"
+        points="0,10 12,9 24,12 36,11 48,14 60,10 72,8 84,11 96,9 108,7 120,8"/>
+    </svg>
+    <div class="bottom"><span class="delta up">+4.3%</span><span class="sub">vs prev 24h</span></div>
+  </div>
+
+  <div class="stat">
+    <div class="top">
+      <div class="lab">MISUNDERSTANDINGS</div>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+    </div>
+    <div class="num">12</div>
+    <svg class="spark" width="100%" height="22" viewBox="0 0 120 22" preserveAspectRatio="none">
+      <polyline fill="none" stroke="oklch(0.50 0.20 270)" stroke-width="1.5"
+        points="0,4 12,6 24,5 36,8 48,7 60,10 72,11 84,14 96,15 108,17 120,18"/>
+    </svg>
+    <div class="bottom"><span class="delta dn">−18%</span><span class="sub">vs prev 24h</span></div>
+  </div>
+
+</div>
+</body>
+</html>

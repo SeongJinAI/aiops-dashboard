@@ -1,0 +1,93 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { padding: 14px 18px; }
+  .timeline {
+    position: relative;
+    padding-left: 16px;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 4px; top: 6px; bottom: 6px;
+    width: 1px;
+    background: var(--border);
+  }
+  .entry {
+    position: relative;
+    padding: 6px 0 12px;
+  }
+  .entry::before {
+    content: "";
+    position: absolute;
+    left: -16px; top: 10px;
+    width: 9px; height: 9px;
+    border-radius: var(--r-full);
+    background: var(--surface);
+    border: 2px solid var(--border);
+  }
+  .entry.current::before {
+    border-color: var(--accent);
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .head {
+    display: flex; align-items: baseline; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .ver { font-weight: 700; font-size: 12px; font-family: var(--font-mono); }
+  .time { font-size: 11px; color: var(--text-faint); }
+  .provider {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: var(--r-sm);
+    background: var(--accent-soft); color: var(--accent-soft-fg);
+    font-weight: 500;
+  }
+  .diff { font-size: 11px; color: var(--text-dim); }
+  .diff .add { color: var(--success); font-family: var(--font-mono); }
+  .diff .rm  { color: var(--danger);  font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="timeline">
+    <div class="entry current">
+      <div class="head">
+        <span class="ver">v3</span>
+        <span class="time">12분 전</span>
+        <span class="provider">anthropic</span>
+      </div>
+      <div class="diff">
+        <span class="add">+4</span> sections, <span class="rm">−1</span> chapter — planner perspective 재정렬, "Coach"
+        섹션 추가
+      </div>
+    </div>
+    <div class="entry">
+      <div class="head">
+        <span class="ver">v2</span>
+        <span class="time">5월 27일 · 18:42</span>
+        <span class="provider">openai</span>
+      </div>
+      <div class="diff">
+        <span class="add">+2</span> sections, <span class="rm">−3</span> paragraphs — developer perspective 코드 예제 보강
+      </div>
+    </div>
+    <div class="entry">
+      <div class="head">
+        <span class="ver">v1</span>
+        <span class="time">5월 26일 · 09:14</span>
+        <span class="provider">anthropic</span>
+      </div>
+      <div class="diff">
+        initial build — catalog 252 .md files
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

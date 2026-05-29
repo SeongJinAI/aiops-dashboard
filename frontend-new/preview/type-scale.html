@@ -1,0 +1,64 @@
+<!-- @dsCard group="Type" -->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; padding-bottom: 0; }
+  .tok {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="stack">
+    <div class="row">
+      <div class="tok">--t-h1</div>
+      <div class="t-h1">홈 · 시스템 상태</div>
+      <div class="meta">18 / 700</div>
+    </div>
+    <div class="row">
+      <div class="tok">--t-h2</div>
+      <div class="t-h2">최근 활동 · Recent activity</div>
+      <div class="meta">15 / 700</div>
+    </div>
+    <div class="row">
+      <div class="tok">--t-h3</div>
+      <div class="t-h3">프롬프트 (24시간)</div>
+      <div class="meta">13 / 600</div>
+    </div>
+    <div class="row">
+      <div class="tok">--t-body</div>
+      <div class="t-body">위키 v3가 자동 생성되었습니다. planner perspective 기준으로 ‘Track → Wikify → Coach’ 흐름이 정리되어 있습니다.</div>
+      <div class="meta">12 / 400</div>
+    </div>
+    <div class="row">
+      <div class="tok">--t-sm</div>
+      <div class="t-sm">5월 28일 · 12분 전 · Anthropic / claude-haiku-4-5</div>
+      <div class="meta">11 / 400</div>
+    </div>
+    <div class="row">
+      <div class="tok">--t-xs</div>
+      <div class="t-xs">RUNNING · 3 SERVICES</div>
+      <div class="meta">10 / 500</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

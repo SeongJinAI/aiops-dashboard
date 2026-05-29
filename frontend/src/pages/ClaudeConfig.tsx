@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { C } from '../constants/colors';
-import { Box } from '../components/shared/Box';
+import { Box } from '../ui/primitives';
 import { useApi } from '../hooks/useApi';
 import type { ClaudeConfigData } from '../types';
 

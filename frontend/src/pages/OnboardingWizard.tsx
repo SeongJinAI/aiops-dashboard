@@ -323,6 +323,27 @@ export function OnboardingWizard({
 
               <CodeBlock code={commands.oneLineInstall} />
 
+              {apiKey && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <a
+                    href={`${apiBase}/api/scripts/install.sh?token=${encodeURIComponent(apiKey)}&download=1`}
+                    download="nova-install.sh"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', fontSize: 12,
+                      background: C.surfaceAlt, color: C.text,
+                      border: `1px solid ${C.border}`, borderRadius: 6,
+                      textDecoration: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    ⬇ install.sh 다운로드
+                  </a>
+                  <span style={{ fontSize: 11, color: C.dim }}>
+                    받은 후 레포 루트에서 <code>bash nova-install.sh</code>
+                  </span>
+                </div>
+              )}
+
               <div
                 style={{
                   marginTop: 14,

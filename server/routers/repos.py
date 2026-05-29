@@ -104,16 +104,17 @@ async def mcp_calls(limit: int = Query(default=100), user: dict = Depends(get_cu
 @router.get("/categories/summary")
 async def categories_summary(user: dict = Depends(get_current_user)):
     """tenant별 카테고리별 로그 건수 요약 (최근 30일)"""
-    import sqlite3
     from datetime import date, timedelta
-    from services.db import DB_PATH
+    from sqlalchemy import func, select
+    from models.db_models import Log
+    from services.database import session_scope
 
     since = (date.today() - timedelta(days=30)).isoformat()
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT category, COUNT(*) as cnt FROM logs WHERE tenant_id = ? AND ts >= ? GROUP BY category ORDER BY cnt DESC",
-        (user["tenant_id"], since),
-    ).fetchall()
-    conn.close()
-    return [{"category": r["category"], "count": r["cnt"]} for r in rows]
+    async with session_scope() as s:
+        rows = (await s.execute(
+            select(Log.category, func.count().label("cnt"))
+            .where(Log.tenant_id == user["tenant_id"], Log.ts >= since)
+            .group_by(Log.category)
+            .order_by(func.count().desc())
+        )).all()
+    return [{"category": r.category, "count": r.cnt} for r in rows]

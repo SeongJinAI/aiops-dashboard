@@ -8,13 +8,18 @@ Hermes Agent API — 프로젝트 위키 자동 생성기.
   GET  /api/hermes/runs           - 위키 생성 실행 히스토리
 """
 import asyncio
-import sqlite3
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import desc, func, select, update as _update
+
 from middleware.auth import get_current_user
-from services.db import DB_PATH
+from models.db_models import HermesWiki, HermesWikiRun, Project
+from services.database import session_scope
+from services.db import list_assets
 from services.llm import PROVIDER_NAMES
+from services.log_store import AIOPS_MODE
 from services.hermes.catalog import (
+    AssetEntry,
     catalog_assets,
     group_by_perspective,
     summarize,
@@ -26,18 +31,40 @@ from services.hermes.diff import compute_chapter_diff, compose_run_summary
 router = APIRouter()
 
 
-def _get_active_project_path(tenant_id: str) -> tuple[str, str]:
+async def _load_assets(tenant_id: str, project_name: str, repo_path: str) -> list[AssetEntry]:
+    """모드별 자산 소스 분기.
+    - SaaS: DB의 assets 테이블(install.sh가 초기 push + Hook이 변경분 push)
+    - local: 서버 파일시스템 rglob (기존 동작)
+    """
+    if AIOPS_MODE == "saas":
+        rows = await list_assets(tenant_id, project_name)
+        result: list[AssetEntry] = []
+        for r in rows:
+            content = r["content"] or ""
+            size = r["size_bytes"] or len(content.encode("utf-8"))
+            result.append(AssetEntry(
+                path=r["path"],
+                perspective=r["perspective"] or "developer",
+                size_bytes=size,
+                preview=content[:240],
+                bucket=r["bucket"] or "misc",
+                content=content,
+            ))
+        return result
+    return catalog_assets(repo_path)
+
+
+async def _get_active_project_path(tenant_id: str) -> tuple[str, str]:
     """tenant의 활성 프로젝트 (name, repo_path) 반환."""
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    row = conn.execute(
-        "SELECT name, repo_path FROM projects WHERE tenant_id = ? AND status = 'active' LIMIT 1",
-        (tenant_id,),
-    ).fetchone()
-    conn.close()
+    async with session_scope() as s:
+        row = (await s.execute(
+            select(Project.name, Project.repo_path)
+            .where(Project.tenant_id == tenant_id, Project.status == "active")
+            .limit(1)
+        )).first()
     if not row:
         return "", ""
-    return row["name"] or "", row["repo_path"] or ""
+    return row.name or "", row.repo_path or ""
 
 
 @router.post("/catalog")
@@ -47,14 +74,16 @@ async def hermes_catalog(user: dict = Depends(get_current_user)):
     LLM 호출 없음. 로컬 파일 시스템 read-only.
     """
     tenant_id = user["tenant_id"]
-    project_name, repo_path = _get_active_project_path(tenant_id)
-    if not repo_path:
+    project_name, repo_path = await _get_active_project_path(tenant_id)
+    if not project_name:
         raise HTTPException(
             status_code=400,
-            detail="활성 프로젝트가 없거나 repoPath가 비어있습니다. '프로젝트 교체' 탭에서 등록해주세요.",
+            detail="활성 프로젝트가 없습니다. 사용자 머신에서 install.sh를 실행하면 자동 등록됩니다.",
         )
+    if AIOPS_MODE == "local" and not repo_path:
+        raise HTTPException(status_code=400, detail="로컬 모드: repoPath가 비어있습니다.")
 
-    assets = catalog_assets(repo_path)
+    assets = await _load_assets(tenant_id, project_name, repo_path)
     return {
         "project": project_name,
         "repoPath": repo_path,
@@ -65,41 +94,54 @@ async def hermes_catalog(user: dict = Depends(get_current_user)):
 
 @router.get("/wiki/latest")
 async def hermes_wiki_latest(user: dict = Depends(get_current_user)):
-    """활성 프로젝트의 최신 위키 3챕터 반환. Phase 2 구현 전까지는 빈 결과."""
+    """활성 프로젝트의 최신 위키 3챕터 반환."""
     tenant_id = user["tenant_id"]
-    project_name, _ = _get_active_project_path(tenant_id)
+    project_name, _ = await _get_active_project_path(tenant_id)
     if not project_name:
         return {"project": "", "perspectives": {}, "version": 0, "updatedAt": None}
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT perspective, content, version, updated_at
-        FROM hermes_wikis
-        WHERE tenant_id = ? AND project_name = ?
-          AND (tenant_id, project_name, perspective, version) IN (
-              SELECT tenant_id, project_name, perspective, MAX(version)
-              FROM hermes_wikis
-              WHERE tenant_id = ? AND project_name = ?
-              GROUP BY perspective
-          )
-        """,
-        (tenant_id, project_name, tenant_id, project_name),
-    ).fetchall()
-    conn.close()
+    # perspective별 MAX(version) 서브쿼리
+    sub = (
+        select(
+            HermesWiki.perspective,
+            func.max(HermesWiki.version).label("max_v"),
+        )
+        .where(HermesWiki.tenant_id == tenant_id, HermesWiki.project_name == project_name)
+        .group_by(HermesWiki.perspective)
+        .subquery()
+    )
+    stmt = (
+        select(
+            HermesWiki.perspective, HermesWiki.content,
+            HermesWiki.version, HermesWiki.updated_at,
+        )
+        .join(
+            sub,
+            (HermesWiki.perspective == sub.c.perspective)
+            & (HermesWiki.version == sub.c.max_v),
+        )
+        .where(HermesWiki.tenant_id == tenant_id, HermesWiki.project_name == project_name)
+    )
+    async with session_scope() as s:
+        rows = (await s.execute(stmt)).all()
 
-    perspectives = {r["perspective"]: {
-        "content": r["content"],
-        "version": r["version"],
-        "updatedAt": r["updated_at"],
-    } for r in rows}
+    perspectives = {
+        r.perspective: {
+            "content": r.content,
+            "version": r.version,
+            "updatedAt": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    }
     max_version = max((p["version"] for p in perspectives.values()), default=0)
     return {
         "project": project_name,
         "perspectives": perspectives,
         "version": max_version,
-        "updatedAt": max((p["updatedAt"] for p in perspectives.values()), default=None),
+        "updatedAt": max(
+            (p["updatedAt"] for p in perspectives.values() if p["updatedAt"]),
+            default=None,
+        ),
     }
 
 
@@ -126,10 +168,15 @@ async def _run_wiki_update(tenant_id: str, project_name: str, repo_path: str, ru
     """
     try:
         await _publish_progress(tenant_id, run_id, "catalog", "자산 카탈로그 스캔 중...", 5)
-        assets = catalog_assets(repo_path)
+        assets = await _load_assets(tenant_id, project_name, repo_path)
         if not assets:
-            await _publish_progress(tenant_id, run_id, "failed", "자산을 찾을 수 없습니다.", 100)
-            _finish_run(run_id, status="failed", error="자산을 찾을 수 없습니다.")
+            msg = (
+                "자산을 찾을 수 없습니다. install.sh 또는 PostToolUse Hook으로 .md를 sync했는지 확인하세요."
+                if AIOPS_MODE == "saas"
+                else "자산을 찾을 수 없습니다."
+            )
+            await _publish_progress(tenant_id, run_id, "failed", msg, 100)
+            await _finish_run(run_id, status="failed", error=msg)
             return
 
         await _publish_progress(tenant_id, run_id, "catalog", f"자산 {len(assets)}개 분류 완료", 15)
@@ -152,9 +199,9 @@ async def _run_wiki_update(tenant_id: str, project_name: str, repo_path: str, ru
             provider=provider,
         )
 
-        # DB 저장 — 성공한 perspective만 새 version으로 기록 + diff 계산
-        conn = sqlite3.connect(str(DB_PATH))
-        try:
+        # DB 저장 — 성공한 perspective만 새 version으로 기록 + diff 계산 (단일 트랜잭션)
+        from datetime import datetime as _dt, timezone as _tz
+        async with session_scope() as s:
             total_chars = 0
             success_persps: list[str] = []
             failure_msgs: list[str] = []
@@ -170,24 +217,26 @@ async def _run_wiki_update(tenant_id: str, project_name: str, repo_path: str, ru
                 total_chars += len(content)
                 success_persps.append(perspective)
 
-                # 이전 버전 가져와서 diff 계산
-                prev_row = conn.execute(
-                    """SELECT content, version FROM hermes_wikis
-                       WHERE tenant_id=? AND project_name=? AND perspective=?
-                       ORDER BY version DESC LIMIT 1""",
-                    (tenant_id, project_name, perspective),
-                ).fetchone()
-                prev_content = prev_row[0] if prev_row else ""
-                prev_version = prev_row[1] if prev_row else 0
-                diff_info = compute_chapter_diff(prev_content, content)
-                diffs_per_persp[perspective] = diff_info
+                # 이전 버전 — diff 계산
+                prev = (await s.execute(
+                    select(HermesWiki.content, HermesWiki.version)
+                    .where(
+                        HermesWiki.tenant_id == tenant_id,
+                        HermesWiki.project_name == project_name,
+                        HermesWiki.perspective == perspective,
+                    )
+                    .order_by(desc(HermesWiki.version))
+                    .limit(1)
+                )).first()
+                prev_content = prev.content if prev else ""
+                prev_version = prev.version if prev else 0
+                diffs_per_persp[perspective] = compute_chapter_diff(prev_content, content)
 
-                conn.execute(
-                    """INSERT INTO hermes_wikis
-                       (tenant_id, project_name, perspective, content, version)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (tenant_id, project_name, perspective, content, prev_version + 1),
-                )
+                s.add(HermesWiki(
+                    tenant_id=tenant_id, project_name=project_name,
+                    perspective=perspective, content=content,
+                    version=prev_version + 1,
+                ))
 
             full_summary = compose_run_summary(diffs_per_persp)
             if failure_msgs:
@@ -195,15 +244,17 @@ async def _run_wiki_update(tenant_id: str, project_name: str, repo_path: str, ru
 
             if success_persps:
                 status = "success" if not failure_msgs else "partial_success"
-                conn.execute(
-                    """UPDATE hermes_wiki_runs
-                       SET status=?, finished_at=datetime('now'),
-                           input_count=?, output_chars=?, diff_summary=?,
-                           error=?
-                       WHERE id=?""",
-                    (status, len(assets), total_chars, full_summary,
-                     "; ".join(failure_msgs) if failure_msgs else None,
-                     run_id),
+                await s.execute(
+                    _update(HermesWikiRun)
+                    .where(HermesWikiRun.id == run_id)
+                    .values(
+                        status=status,
+                        finished_at=_dt.now(_tz.utc),
+                        input_count=len(assets),
+                        output_chars=total_chars,
+                        diff_summary=full_summary,
+                        error="; ".join(failure_msgs) if failure_msgs else None,
+                    )
                 )
                 await _publish_progress(
                     tenant_id, run_id, "complete",
@@ -211,40 +262,39 @@ async def _run_wiki_update(tenant_id: str, project_name: str, repo_path: str, ru
                     100,
                 )
             else:
-                conn.execute(
-                    """UPDATE hermes_wiki_runs
-                       SET status='failed', finished_at=datetime('now'),
-                           input_count=?, output_chars=0, error=?
-                       WHERE id=?""",
-                    (len(assets), "; ".join(failure_msgs) or "모든 챕터 실패", run_id),
+                await s.execute(
+                    _update(HermesWikiRun)
+                    .where(HermesWikiRun.id == run_id)
+                    .values(
+                        status="failed",
+                        finished_at=_dt.now(_tz.utc),
+                        input_count=len(assets),
+                        output_chars=0,
+                        error="; ".join(failure_msgs) or "모든 챕터 실패",
+                    )
                 )
                 await _publish_progress(
                     tenant_id, run_id, "failed",
                     "모든 챕터 생성 실패: " + "; ".join(failure_msgs),
                     100,
                 )
-            conn.commit()
-        finally:
-            conn.close()
     except LLMNotConfigured as e:
         await _publish_progress(tenant_id, run_id, "failed", str(e), 100)
-        _finish_run(run_id, status="failed", error=str(e))
+        await _finish_run(run_id, status="failed", error=str(e))
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
         await _publish_progress(tenant_id, run_id, "failed", err, 100)
-        _finish_run(run_id, status="failed", error=err)
+        await _finish_run(run_id, status="failed", error=err)
 
 
-def _finish_run(run_id: int, status: str, error: str | None = None):
-    conn = sqlite3.connect(str(DB_PATH))
-    try:
-        conn.execute(
-            "UPDATE hermes_wiki_runs SET status=?, finished_at=datetime('now'), error=? WHERE id=?",
-            (status, error, run_id),
+async def _finish_run(run_id: int, status: str, error: str | None = None):
+    from datetime import datetime as _dt, timezone as _tz
+    async with session_scope() as s:
+        await s.execute(
+            _update(HermesWikiRun)
+            .where(HermesWikiRun.id == run_id)
+            .values(status=status, finished_at=_dt.now(_tz.utc), error=error)
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 class WikiUpdateRequest(BaseModel):
@@ -263,9 +313,11 @@ async def hermes_wiki_update(
     즉시 run_id 반환. 진행 상황은 WebSocket /ws/logs 의 hermes_progress 카테고리 또는 GET /runs 폴링.
     """
     tenant_id = user["tenant_id"]
-    project_name, repo_path = _get_active_project_path(tenant_id)
-    if not repo_path:
+    project_name, repo_path = await _get_active_project_path(tenant_id)
+    if not project_name:
         raise HTTPException(status_code=400, detail="활성 프로젝트가 없습니다.")
+    if AIOPS_MODE == "local" and not repo_path:
+        raise HTTPException(status_code=400, detail="로컬 모드: repoPath가 비어있습니다.")
 
     provider = (req.provider if req else None) or None
     if provider and provider not in PROVIDER_NAMES:
@@ -274,45 +326,56 @@ async def hermes_wiki_update(
             detail=f"지원하지 않는 provider: {provider!r}. 사용 가능: {sorted(PROVIDER_NAMES)}",
         )
 
-    # 이미 진행 중인 run이 있으면 거부 (간단 락)
-    conn = sqlite3.connect(str(DB_PATH))
-    try:
-        row = conn.execute(
-            "SELECT id FROM hermes_wiki_runs WHERE tenant_id=? AND project_name=? AND status='running'",
-            (tenant_id, project_name),
-        ).fetchone()
-        if row:
+    # 이미 진행 중인 run이 있으면 거부 + 새 run row 생성 (한 트랜잭션)
+    async with session_scope() as s:
+        running = (await s.execute(
+            select(HermesWikiRun.id).where(
+                HermesWikiRun.tenant_id == tenant_id,
+                HermesWikiRun.project_name == project_name,
+                HermesWikiRun.status == "running",
+            )
+        )).first()
+        if running:
             raise HTTPException(status_code=409, detail="이미 진행 중인 업데이트가 있습니다.")
-        cursor = conn.execute(
-            "INSERT INTO hermes_wiki_runs (tenant_id, project_name, status) VALUES (?, ?, 'running')",
-            (tenant_id, project_name),
+        new_run = HermesWikiRun(
+            tenant_id=tenant_id, project_name=project_name, status="running",
         )
-        run_id = cursor.lastrowid
-        conn.commit()
-    finally:
-        conn.close()
+        s.add(new_run)
+        await s.flush()
+        run_id = new_run.id
 
-    # 백그라운드로 실제 실행
     background.add_task(_run_wiki_update, tenant_id, project_name, repo_path, run_id, provider)
     return {"run_id": run_id, "status": "running", "project": project_name, "provider": provider or "anthropic"}
+
+
+def _run_to_dict(r: HermesWikiRun) -> dict:
+    return {
+        "id": r.id,
+        "tenant_id": r.tenant_id,
+        "project_name": r.project_name,
+        "status": r.status,
+        "started_at": r.started_at.isoformat() if r.started_at else None,
+        "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+        "input_count": r.input_count,
+        "output_chars": r.output_chars,
+        "error": r.error,
+        "diff_summary": r.diff_summary,
+    }
 
 
 @router.get("/runs/{run_id}")
 async def hermes_run_get(run_id: int, user: dict = Depends(get_current_user)):
     """단일 run의 현재 상태 조회 (폴링용)."""
     tenant_id = user["tenant_id"]
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    try:
-        row = conn.execute(
-            "SELECT * FROM hermes_wiki_runs WHERE id=? AND tenant_id=?",
-            (run_id, tenant_id),
-        ).fetchone()
-    finally:
-        conn.close()
-    if not row:
+    async with session_scope() as s:
+        run = (await s.execute(
+            select(HermesWikiRun).where(
+                HermesWikiRun.id == run_id, HermesWikiRun.tenant_id == tenant_id,
+            )
+        )).scalar_one_or_none()
+    if not run:
         raise HTTPException(status_code=404, detail="run not found")
-    return dict(row)
+    return _run_to_dict(run)
 
 
 @router.get("/wiki/versions")
@@ -329,33 +392,32 @@ async def hermes_wiki_versions(
         raise HTTPException(status_code=400, detail="perspective는 planner/developer/user 중 하나")
 
     tenant_id = user["tenant_id"]
-    project_name, _ = _get_active_project_path(tenant_id)
+    project_name, _ = await _get_active_project_path(tenant_id)
     if not project_name:
         return []
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            """SELECT version, content, updated_at FROM hermes_wikis
-               WHERE tenant_id=? AND project_name=? AND perspective=?
-               ORDER BY version ASC""",
-            (tenant_id, project_name, perspective),
-        ).fetchall()
-    finally:
-        conn.close()
+    async with session_scope() as s:
+        rows = (await s.execute(
+            select(HermesWiki.version, HermesWiki.content, HermesWiki.updated_at)
+            .where(
+                HermesWiki.tenant_id == tenant_id,
+                HermesWiki.project_name == project_name,
+                HermesWiki.perspective == perspective,
+            )
+            .order_by(HermesWiki.version.asc())
+        )).all()
 
     result: list[dict] = []
     prev_content = ""
     for r in rows:
-        d = compute_chapter_diff(prev_content, r["content"])
+        d = compute_chapter_diff(prev_content, r.content)
         result.append({
-            "version": r["version"],
-            "updatedAt": r["updated_at"],
-            "chars": len(r["content"] or ""),
+            "version": r.version,
+            "updatedAt": r.updated_at.isoformat() if r.updated_at else None,
+            "chars": len(r.content or ""),
             "diffFromPrev": d,
         })
-        prev_content = r["content"]
+        prev_content = r.content
     return list(reversed(result))
 
 
@@ -369,46 +431,39 @@ async def hermes_wiki_version_get(
     if perspective not in ("planner", "developer", "user"):
         raise HTTPException(status_code=400, detail="perspective는 planner/developer/user 중 하나")
     tenant_id = user["tenant_id"]
-    project_name, _ = _get_active_project_path(tenant_id)
+    project_name, _ = await _get_active_project_path(tenant_id)
     if not project_name:
         raise HTTPException(status_code=404, detail="활성 프로젝트가 없습니다")
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    try:
-        row = conn.execute(
-            """SELECT version, content, updated_at FROM hermes_wikis
-               WHERE tenant_id=? AND project_name=? AND perspective=? AND version=?""",
-            (tenant_id, project_name, perspective, version),
-        ).fetchone()
-    finally:
-        conn.close()
+    async with session_scope() as s:
+        row = (await s.execute(
+            select(HermesWiki.version, HermesWiki.content, HermesWiki.updated_at)
+            .where(
+                HermesWiki.tenant_id == tenant_id,
+                HermesWiki.project_name == project_name,
+                HermesWiki.perspective == perspective,
+                HermesWiki.version == version,
+            )
+        )).first()
     if not row:
         raise HTTPException(status_code=404, detail="해당 버전을 찾을 수 없습니다")
     return {
         "perspective": perspective,
-        "version": row["version"],
-        "content": row["content"],
-        "updatedAt": row["updated_at"],
+        "version": row.version,
+        "content": row.content,
+        "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
     }
 
 
 @router.get("/runs")
 async def hermes_runs(limit: int = 20, user: dict = Depends(get_current_user)):
-    """위키 생성 실행 히스토리 (Phase 2 이후 채워짐)."""
+    """위키 생성 실행 히스토리."""
     tenant_id = user["tenant_id"]
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT id, project_name, status, started_at, finished_at,
-               input_count, output_chars, error, diff_summary
-        FROM hermes_wiki_runs
-        WHERE tenant_id = ?
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (tenant_id, limit),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    async with session_scope() as s:
+        runs = (await s.execute(
+            select(HermesWikiRun)
+            .where(HermesWikiRun.tenant_id == tenant_id)
+            .order_by(desc(HermesWikiRun.id))
+            .limit(limit)
+        )).scalars().all()
+    return [_run_to_dict(r) for r in runs]

@@ -34,45 +34,49 @@ def _save_projects(projects: list[dict]):
         json.dump(projects, f, ensure_ascii=False, indent=2)
 
 
-# --- DB 기반 (saas 모드) ---
+# --- DB 기반 (saas 모드) — SQLAlchemy ORM ---
 
 async def _db_get_projects(tenant_id: str) -> list[dict]:
-    import aiosqlite
-    from services.db import DB_PATH
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT name, url, domain, repo_path, status FROM projects WHERE tenant_id = ?",
-            (tenant_id,),
-        )
-        rows = await cursor.fetchall()
-    return [{"name": r["name"], "url": r["url"], "domain": r["domain"], "repoPath": r["repo_path"], "status": r["status"]} for r in rows]
+    from sqlalchemy import select
+    from models.db_models import Project
+    from services.database import session_scope
+    async with session_scope() as s:
+        rows = (await s.execute(
+            select(Project).where(Project.tenant_id == tenant_id)
+        )).scalars().all()
+    return [
+        {"name": p.name, "url": p.url, "domain": p.domain,
+         "repoPath": p.repo_path, "status": p.status}
+        for p in rows
+    ]
 
 
 async def _db_swap_project(tenant_id: str, name: str, repo_path: str = "", git_url: str = "") -> dict:
-    import aiosqlite
-    from services.db import DB_PATH
-    async with aiosqlite.connect(str(DB_PATH)) as conn:
-        await conn.execute(
-            "UPDATE projects SET status = 'ready' WHERE tenant_id = ? AND status = 'active'",
-            (tenant_id,),
+    from sqlalchemy import select, update
+    from models.db_models import Project
+    from services.database import session_scope
+    async with session_scope() as s:
+        # 기존 활성 프로젝트 deactivate
+        await s.execute(
+            update(Project)
+            .where(Project.tenant_id == tenant_id, Project.status == "active")
+            .values(status="ready")
         )
-        cursor = await conn.execute(
-            "SELECT id FROM projects WHERE tenant_id = ? AND name = ?",
-            (tenant_id, name),
-        )
-        row = await cursor.fetchone()
-        if row:
-            await conn.execute(
-                "UPDATE projects SET status = 'active', repo_path = CASE WHEN ? != '' THEN ? ELSE repo_path END, url = CASE WHEN ? != '' THEN ? ELSE url END WHERE tenant_id = ? AND name = ?",
-                (repo_path, repo_path, git_url, git_url, tenant_id, name),
-            )
+        existing = (await s.execute(
+            select(Project).where(Project.tenant_id == tenant_id, Project.name == name)
+        )).scalar_one_or_none()
+        if existing:
+            existing.status = "active"
+            if repo_path:
+                existing.repo_path = repo_path
+            if git_url:
+                existing.url = git_url
         else:
-            await conn.execute(
-                "INSERT INTO projects (tenant_id, name, url, domain, repo_path, status) VALUES (?, ?, ?, '새 프로젝트', ?, 'active')",
-                (tenant_id, name, git_url or "", repo_path),
-            )
-        await conn.commit()
+            s.add(Project(
+                tenant_id=tenant_id, name=name,
+                url=git_url or "", domain="새 프로젝트",
+                repo_path=repo_path, status="active",
+            ))
     return {"success": True, "active": name}
 
 

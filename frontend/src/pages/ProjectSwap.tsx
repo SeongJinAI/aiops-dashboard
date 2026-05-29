@@ -1,7 +1,9 @@
+// 프로젝트 교체 — /projects 목록 + /projects/swap. 전환 단계 모달 보존, 새 디자인.
 import { useState } from 'react';
-import { C } from '../constants/colors';
-import { Box } from '../components/shared/Box';
 import { useApi, apiPost } from '../hooks/useApi';
+import { useToast } from '../ui/toast';
+import { Icon } from '../ui/Icon';
+import { Box, Btn, Chip } from '../ui/primitives';
 import type { Project } from '../types';
 
 interface ProjectSwapProps {
@@ -9,30 +11,32 @@ interface ProjectSwapProps {
   setActiveProject: (p: Project) => void;
 }
 
+const STEPS = [
+  '프로젝트 레포 연결 해제', '.env 변수 업데이트', 'setup.sh 실행 (config 재생성)',
+  '지식 레포 경로 갱신', '테스트 레포 연결 갱신', 'Hook 검증', '완료',
+];
+
 export function ProjectSwap({ activeProject, setActiveProject }: ProjectSwapProps) {
-  const [swapUrl, setSwapUrl] = useState("");
+  const { pushToast } = useToast();
+  // 백엔드 라우터가 `/api/projects/` (trailing slash)로 등록돼 있어
+  // 슬래시 없이 호출하면 307 redirect 후 Authorization 헤더가 드롭되어 401이 된다.
+  const { data: projects } = useApi<Project[]>('/projects/', []);
+  const [swapUrl, setSwapUrl] = useState('');
   const [confirmSwap, setConfirmSwap] = useState<Project | null>(null);
   const [swapStep, setSwapStep] = useState<number | null>(null);
 
-  const { data: projects } = useApi<Project[]>('/projects', []);
-
   const handleSwap = (project: Project) => { setConfirmSwap(project); setSwapStep(null); };
-
-  const STEPS = ["프로젝트 레포 연결 해제", ".env 변수 업데이트", "setup.sh 실행 (config 재생성)", "지식 레포 경로 갱신", "테스트 레포 연결 갱신", "Hook 검증", "완료"];
 
   const executeSwap = async () => {
     if (!confirmSwap) return;
     setSwapStep(0);
-
     try {
       await apiPost('/projects/swap', {
         name: confirmSwap.name,
-        repoPath: confirmSwap.repoPath || "",
-        gitUrl: confirmSwap.url || "",
+        repoPath: confirmSwap.repoPath || '',
+        gitUrl: confirmSwap.url || '',
       });
-    } catch {
-      // API 실패해도 UI 애니메이션은 진행
-    }
+    } catch { /* UI 애니메이션은 계속 진행 */ }
 
     let i = 0;
     const iv = setInterval(() => {
@@ -42,93 +46,115 @@ export function ProjectSwap({ activeProject, setActiveProject }: ProjectSwapProp
         clearInterval(iv);
         setTimeout(() => {
           setActiveProject(confirmSwap);
+          pushToast({ tone: 'success', title: `프로젝트 전환됨 — ${confirmSwap.name}`, desc: 'Hook·프롬프트·위키가 이 프로젝트 기준으로 재계산됩니다.' });
           setConfirmSwap(null);
           setSwapStep(null);
-        }, 800);
+        }, 600);
       }
-    }, 600);
+    }, 500);
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>프로젝트 교체</h2>
-        <p style={{ fontSize: 12, color: C.dim }}>프로젝트 레포만 교체하면 나머지 4개 레포는 그대로 재사용됩니다.</p>
+    <>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title"><Icon name="folder" size={18} />프로젝트</h1>
+          <div className="page-sub">프로젝트 레포만 교체하면 나머지 4개 레포는 그대로 재사용됩니다.</div>
+        </div>
       </div>
 
-      <Box title="현재 활성 프로젝트">
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 8, background: `${C.green}12`, border: `2px solid ${C.green}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: C.green }}>P</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{activeProject.name}</div>
-            <div style={{ fontSize: 12, color: C.dim }}>{activeProject.url}</div>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>도메인: {activeProject.domain}</div>
+      <Box title="현재 활성 프로젝트" action={<Chip tone="success" dot>active</Chip>}>
+        <div className="active-proj">
+          <div className="active-proj-mark">{(activeProject.name || 'P').slice(0, 1).toUpperCase()}</div>
+          <div className="active-proj-body">
+            <div className="active-proj-name">{activeProject.name}</div>
+            <div className="active-proj-meta">{activeProject.url || '로컬 프로젝트'}{activeProject.domain ? ` · ${activeProject.domain}` : ''}</div>
           </div>
-          <div style={{ padding: "4px 10px", borderRadius: 4, background: `${C.green}12`, border: `1px solid ${C.green}40`, fontSize: 11, color: C.green, fontWeight: 500 }}>ACTIVE</div>
         </div>
       </Box>
 
       <Box title="GitHub URL로 새 프로젝트 연결">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={swapUrl} onChange={e => setSwapUrl(e.target.value)} placeholder="https://github.com/org/repo-name" style={{ flex: 1, padding: "10px 14px", fontSize: 13, fontFamily: "inherit", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text }} />
-          <button onClick={() => { if (swapUrl.trim()) handleSwap({ name: swapUrl.split("/").pop() || "new-project", url: swapUrl, domain: "새 프로젝트", status: "ready" }); }} style={{ padding: "10px 20px", fontSize: 12, background: C.accent, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}>연결</button>
+        <div className="row">
+          <input
+            className="input grow mono"
+            value={swapUrl}
+            onChange={(e) => setSwapUrl(e.target.value)}
+            placeholder="https://github.com/org/repo-name"
+          />
+          <Btn
+            variant="primary"
+            icon="git-branch"
+            onClick={() => {
+              if (swapUrl.trim()) handleSwap({ name: swapUrl.split('/').pop() || 'new-project', url: swapUrl, domain: '새 프로젝트', status: 'ready' });
+            }}
+          >
+            연결
+          </Btn>
         </div>
       </Box>
 
-      <Box title="등록된 프로젝트">
-        {projects.map((p, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 6, background: p.name === activeProject.name ? `${C.green}06` : C.bg, border: `1px solid ${p.name === activeProject.name ? C.green + "40" : C.border}`, marginBottom: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.name === activeProject.name ? C.green : C.dim }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{p.name}</div>
-              <div style={{ fontSize: 11, color: C.dim }}>{p.domain} · {p.url}</div>
+      <Box title="등록된 프로젝트" padding={false}>
+        {projects.length === 0 ? (
+          <div className="empty-inline">등록된 프로젝트가 없습니다. 위에서 GitHub URL로 연결하세요.</div>
+        ) : projects.map((p) => {
+          const isActive = p.name === activeProject.name;
+          return (
+            <div className="activity-row" key={p.name}>
+              <span className={`statusdot statusdot-${isActive ? 'success' : 'neutral'}`} />
+              <div className="activity-title">
+                <div>{p.name}</div>
+                <div className="muted" style={{ fontSize: 10.5 }}>{p.domain}{p.url ? ` · ${p.url}` : ''}</div>
+              </div>
+              {isActive ? (
+                <Chip tone="success">활성</Chip>
+              ) : (
+                <Btn variant="secondary" size="sm" onClick={() => handleSwap(p)}>전환</Btn>
+              )}
             </div>
-            {p.name === activeProject.name ? <span style={{ fontSize: 11, color: C.green, fontWeight: 500 }}>활성</span> : (
-              <button onClick={() => handleSwap(p)} style={{ padding: "5px 12px", fontSize: 11, background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 4, cursor: "pointer" }}>전환</button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </Box>
 
       {confirmSwap && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, width: 440, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+        <div className="scrim" onClick={() => swapStep === null && setConfirmSwap(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             {swapStep === null ? (
               <>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>프로젝트 교체 확인</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: 12, background: C.bg, borderRadius: 6 }}>
-                  <span style={{ color: C.red, fontSize: 13 }}>{activeProject.name}</span>
-                  <span style={{ color: C.dim }}>{"\u2192"}</span>
-                  <span style={{ color: C.green, fontSize: 13 }}>{confirmSwap.name}</span>
+                <div className="modal-title">프로젝트 교체 확인</div>
+                <div className="row" style={{ marginBottom: 12 }}>
+                  <Chip tone="danger">{activeProject.name}</Chip>
+                  <Icon name="arrow-up-right" size={14} />
+                  <Chip tone="success">{confirmSwap.name}</Chip>
                 </div>
-                <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>교체 시 실행되는 작업:</div>
-                {["거버넌스 레포 — 변경 없음", "테스트 레포 — .env 업데이트 + setup.sh 재실행", "지식 레포 — 새 프로젝트용 구조 초기화", "RAG 레포 — 인덱스 경로 갱신"].map((t, i) => (
-                  <div key={i} style={{ fontSize: 11, color: C.dim, padding: "4px 8px", background: C.bg, borderRadius: 4, marginBottom: 4 }}>{t}</div>
-                ))}
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                  <button onClick={() => setConfirmSwap(null)} style={{ padding: "8px 16px", fontSize: 12, background: "transparent", color: C.dim, border: `1px solid ${C.border}`, borderRadius: 6, cursor: "pointer" }}>취소</button>
-                  <button onClick={executeSwap} style={{ padding: "8px 16px", fontSize: 12, background: C.accent, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}>교체 실행</button>
+                <div className="col" style={{ gap: 4 }}>
+                  {['거버넌스 레포 — 변경 없음', '테스트 레포 — .env 업데이트 + setup.sh 재실행', '지식 레포 — 새 프로젝트용 구조 초기화', 'RAG 레포 — 인덱스 경로 갱신'].map((t) => (
+                    <div className="muted" key={t} style={{ fontSize: 11 }}>· {t}</div>
+                  ))}
+                </div>
+                <div className="row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+                  <Btn variant="ghost" onClick={() => setConfirmSwap(null)}>취소</Btn>
+                  <Btn variant="primary" icon="refresh" onClick={executeSwap}>교체 실행</Btn>
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>교체 진행 중...</div>
-                {STEPS.map((step, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 4, background: i <= swapStep ? `${C.green}08` : C.bg, border: `1px solid ${i <= swapStep ? C.green + "30" : C.border}`, marginBottom: 4 }}>
-                    <span style={{
-                      width: 18, height: 18, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 10, fontWeight: 600,
-                      background: i < swapStep ? C.green : i === swapStep ? C.accent : C.surfaceAlt,
-                      color: i <= swapStep ? "#fff" : C.dim,
-                    }}>{i < swapStep ? "\u2713" : String(i + 1)}</span>
-                    <span style={{ fontSize: 12, color: i <= swapStep ? C.text : C.dim }}>{step}</span>
-                  </div>
-                ))}
+                <div className="modal-title">교체 진행 중…</div>
+                <div className="col" style={{ gap: 4 }}>
+                  {STEPS.map((step, i) => {
+                    const cls = i < swapStep ? 'done' : i === swapStep ? 'active' : '';
+                    return (
+                      <div key={step} className={`steprow ${i === swapStep ? 'active' : ''}`}>
+                        <span className={`stepnum ${cls}`}>{i < swapStep ? '✓' : String(i + 1)}</span>
+                        <span className="steprow-label">{step}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

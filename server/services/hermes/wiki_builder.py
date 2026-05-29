@@ -76,6 +76,17 @@ def _read_file_preview(repo_path: str, rel_path: str) -> str:
         return ""
 
 
+def _asset_text(asset: AssetEntry, repo_path: str) -> str:
+    """자산 본문 가져오기.
+
+    - SaaS 모드: asset.content가 DB에서 미리 채워져 있음 → 그것을 PER_FILE_PREVIEW_CHARS로 truncate
+    - local 모드: asset.content가 None → 파일에서 직접 읽음
+    """
+    if asset.content:
+        return asset.content[:PER_FILE_PREVIEW_CHARS]
+    return _read_file_preview(repo_path, asset.path)
+
+
 def _build_corpus(repo_path: str, assets: list[AssetEntry], budget: int) -> tuple[str, int]:
     """자산들의 본문을 모아 corpus 문자열로. 토큰 budget(char 기준) 초과 시 잘라냄.
 
@@ -85,7 +96,7 @@ def _build_corpus(repo_path: str, assets: list[AssetEntry], budget: int) -> tupl
     total = 0
     included = 0
     for a in assets:
-        body = _read_file_preview(repo_path, a.path)
+        body = _asset_text(a, repo_path)
         if not body:
             continue
         block = f"\n\n---\n## {a.path}  (bucket={a.bucket})\n\n{body.strip()}\n"

@@ -1,0 +1,91 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 18px; }
+
+  /* Underline tabs (page-level) */
+  .tabs-underline {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs-underline .tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+  .tabs-underline .tab:hover { color: var(--text); }
+  .tabs-underline .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .tabs-underline .tab .count {
+    font-family: var(--font-mono); font-size: 10px;
+    background: var(--surface-alt); color: var(--text-faint);
+    padding: 1px 5px; border-radius: var(--r-sm);
+  }
+  .tab .dot {
+    width: 6px; height: 6px; border-radius: var(--r-full);
+    background: var(--accent);
+  }
+  .tab.purple .dot { background: var(--purple); }
+  .tab.cyan .dot { background: var(--cyan); }
+
+  /* Segmented (density-style) */
+  .segmented {
+    display: inline-flex;
+    padding: 2px;
+    background: var(--surface-alt);
+    border-radius: var(--r-sm);
+  }
+  .segmented .seg {
+    padding: 4px 10px;
+    font-size: 11px; font-weight: 500;
+    color: var(--text-dim);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .segmented .seg.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div>
+    <div class="label" style="margin-bottom:8px;">PERSPECTIVE TABS · /agent</div>
+    <div class="tabs-underline">
+      <div class="tab active purple"><span class="dot"></span>기획자</div>
+      <div class="tab"><span class="dot"></span>개발자</div>
+      <div class="tab cyan"><span class="dot"></span>사용자</div>
+      <div class="tab"><span>버전 히스토리</span><span class="count">12</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:8px;">SEGMENTED · density toggle</div>
+    <div class="segmented">
+      <div class="seg active">Compact</div>
+      <div class="seg">Normal</div>
+      <div class="seg">Roomy</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

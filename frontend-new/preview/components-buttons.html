@@ -1,0 +1,103 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .label {
+    width: 70px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+
+  /* base button */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 120ms ease-out, border-color 120ms ease-out;
+  }
+  .btn:hover { background: var(--surface-alt); border-color: var(--border-active); }
+
+  .btn.primary {
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border-color: transparent;
+  }
+  .btn.primary:hover { background: var(--accent-hover); }
+
+  .btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-dim);
+  }
+  .btn.ghost:hover { background: var(--surface-alt); color: var(--text); }
+
+  .btn.danger {
+    color: var(--danger);
+    border-color: var(--border);
+  }
+  .btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+  .btn.sm { height: 22px; font-size: 11px; padding: 0 8px; }
+  .btn.icon { width: 26px; padding: 0; justify-content: center; }
+
+  .btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  svg { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="row">
+    <div class="label">primary</div>
+    <button class="btn primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+      Nova 업데이트
+    </button>
+    <button class="btn primary">키 등록</button>
+    <button class="btn primary" disabled>빌드 중…</button>
+  </div>
+  <div class="row">
+    <div class="label">secondary</div>
+    <button class="btn">버전 비교</button>
+    <button class="btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      새로고침
+    </button>
+    <button class="btn">취소</button>
+  </div>
+  <div class="row">
+    <div class="label">ghost</div>
+    <button class="btn ghost">설정</button>
+    <button class="btn ghost icon" aria-label="more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+    </button>
+    <button class="btn ghost">필터</button>
+  </div>
+  <div class="row">
+    <div class="label">danger</div>
+    <button class="btn danger">키 삭제</button>
+    <button class="btn sm danger">레포 분리</button>
+  </div>
+</div>
+</body>
+</html>

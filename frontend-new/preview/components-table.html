@@ -1,0 +1,107 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--divider);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  thead th {
+    background: var(--surface-alt);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-top: 8px; padding-bottom: 8px;
+  }
+  tbody tr:hover td { background: var(--surface-alt); }
+  td.mono { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+  td.right { text-align: right; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 16px; padding: 0 6px;
+    font-size: 10px; font-weight: 500;
+    border-radius: var(--r-sm);
+  }
+  .chip.success { background: var(--success-soft); color: var(--success); }
+  .chip.danger  { background: var(--danger-soft);  color: var(--danger); }
+  .chip.warn    { background: var(--warning-soft); color: var(--warning); }
+  .dot {
+    width: 6px; height: 6px; border-radius: var(--r-full);
+    background: currentColor;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <table>
+    <thead>
+      <tr>
+        <th>HOOK</th>
+        <th>PROJECT</th>
+        <th>STATUS</th>
+        <th class="right">DURATION</th>
+        <th class="right">TIME</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="mono">PostToolUse · Edit</td>
+        <td>nova</td>
+        <td><span class="chip success"><span class="dot"></span>success</span></td>
+        <td class="right mono">42ms</td>
+        <td class="right mono">12:48:03</td>
+      </tr>
+      <tr>
+        <td class="mono">UserPromptSubmit</td>
+        <td>nova</td>
+        <td><span class="chip success"><span class="dot"></span>success</span></td>
+        <td class="right mono">8ms</td>
+        <td class="right mono">12:47:58</td>
+      </tr>
+      <tr>
+        <td class="mono">PreToolUse · Bash</td>
+        <td>kepler</td>
+        <td><span class="chip warn"><span class="dot"></span>retry</span></td>
+        <td class="right mono">1.2s</td>
+        <td class="right mono">12:47:12</td>
+      </tr>
+      <tr>
+        <td class="mono">Notification</td>
+        <td>kepler</td>
+        <td><span class="chip danger"><span class="dot"></span>failed</span></td>
+        <td class="right mono">3.4s</td>
+        <td class="right mono">12:46:51</td>
+      </tr>
+      <tr>
+        <td class="mono">SessionStart</td>
+        <td>nova</td>
+        <td><span class="chip success"><span class="dot"></span>success</span></td>
+        <td class="right mono">112ms</td>
+        <td class="right mono">12:45:00</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

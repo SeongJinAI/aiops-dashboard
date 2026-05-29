@@ -1,0 +1,42 @@
+/* Shared base for preview cards. Each card is a self-contained HTML file
+   ~700px wide. We import design tokens, then style the card contents. */
+
+@import url("../colors_and_type.css");
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.card {
+  padding: 16px 20px;
+}
+
+.row { display: flex; align-items: center; gap: 12px; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.grow { flex: 1; }
+
+.swatch {
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+}
+
+.label {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}

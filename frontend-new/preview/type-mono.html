@@ -1,0 +1,80 @@
+<!-- @dsCard group="Type" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="_base.css"/>
+<style>
+  .card { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; gap: 12px; align-items: center; }
+  .label { width: 88px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .sample { flex: 1; }
+  code, pre {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .inline-code {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 1px 5px;
+    color: var(--accent-soft-fg);
+  }
+  .block {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 8px 10px;
+    overflow-x: auto;
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: inset 0 -1px 0 var(--border);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text);
+  }
+  .keys { display: inline-flex; gap: 4px; }
+  .keys .plus { color: var(--text-faint); font-size: 10px; align-self: center; }
+  .token { color: var(--purple); }
+  .str { color: var(--success); }
+  .com { color: var(--text-faint); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="row">
+    <div class="label">inline</div>
+    <div class="sample t-body">
+      Run <code class="inline-code">npm run dev</code> then open <code class="inline-code">/prompts</code> for the chart.
+    </div>
+  </div>
+  <div class="row">
+    <div class="label">block</div>
+    <div class="sample">
+      <pre class="block"><span class="com"># register a BYOK key</span>
+<span class="token">curl</span> -X POST /api/secrets \
+  -H <span class="str">"Authorization: Bearer $TOKEN"</span> \
+  -d <span class="str">'{"provider":"anthropic","key":"sk-ant-..."}'</span></pre>
+    </div>
+  </div>
+  <div class="row">
+    <div class="label">shortcut</div>
+    <div class="sample">
+      <span class="keys"><span class="key">⌘</span><span class="plus">+</span><span class="key">K</span></span>
+      &nbsp;Command palette &nbsp;&nbsp;
+      <span class="keys"><span class="key">G</span><span class="plus">·</span><span class="key">H</span></span>
+      &nbsp;Go to Home
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from services.auth import verify_api_key, verify_api_key_db
+from routers.health import resolve_public_url
 
 router = APIRouter()
 
@@ -46,25 +47,35 @@ async def log_event_script():
 
 
 def _resolve_api_base(request: Request, override: str | None) -> str:
+    """install.sh 명령용 베이스 URL. ?base= 쿼리가 있으면 그 값을, 없으면
+    AIOPS_PUBLIC_URL 또는 요청 헤더로 추론 (health.resolve_public_url와 통일)."""
     if override:
         return override.rstrip("/")
-    scheme = request.headers.get("X-Forwarded-Proto") or request.url.scheme
-    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or request.url.netloc
-    return f"{scheme}://{host}"
+    return resolve_public_url(request)
 
 
-@router.get("/install.sh", response_class=PlainTextResponse)
-async def integrated_installer(request: Request, token: str = "", base: str = ""):
+@router.get("/install.sh")
+async def integrated_installer(
+    request: Request,
+    token: str = "",
+    base: str = "",
+    download: int = 0,
+):
     """통합 설치 스크립트.
 
-    사용:
-      bash -c "$(curl -fsSL https://<dashboard>/api/scripts/install.sh?token=<API_KEY>)"
+    사용 옵션:
+      A) curl 한 줄:
+         bash -c "$(curl -fsSL https://<dashboard>/api/scripts/install.sh?token=<API_KEY>)"
+      B) 다운로드 후 실행 (download=1):
+         curl -o nova-install.sh "...?token=...&download=1"
+         bash nova-install.sh
 
     동작:
       1) ~/.claude/.env 에 AIOPS_REMOTE_URL/AIOPS_API_KEY/AIOPS_TENANT_ID 추가 (idempotent)
       2) 현재 디렉토리(또는 git toplevel)를 활성 프로젝트로 자동 등록
       3) .claude/hooks/ + .aiops/ 디렉토리 생성, Hook 스크립트 3종 다운로드, settings.json 패치
-      4) 테스트 ping 전송으로 연결 확인
+      4) 프로젝트 .md 자산 초기 push (Hermes 위키/RAG 입력)
+      5) 테스트 ping 전송으로 연결 확인
     """
     if not token:
         raise HTTPException(status_code=400, detail="token 파라미터가 필요합니다")
@@ -76,7 +87,13 @@ async def integrated_installer(request: Request, token: str = "", base: str = ""
         raise HTTPException(status_code=401, detail="유효하지 않은 API 키입니다")
 
     api_base = _resolve_api_base(request, base or None)
-    return _build_integrated_script(api_base, token, tenant_id)
+    body = _build_integrated_script(api_base, token, tenant_id)
+
+    headers = {}
+    if download:
+        # 브라우저가 .sh로 파일 저장하도록 강제. inline 표시(텍스트)는 차단.
+        headers["Content-Disposition"] = 'attachment; filename="nova-install.sh"'
+    return PlainTextResponse(body, headers=headers)
 
 
 def _build_integrated_script(api_base: str, api_key: str, tenant_id: str) -> str:
@@ -103,7 +120,7 @@ echo "    tenant  : $TENANT_ID"
 echo ""
 
 # 1) ~/.claude/.env 패치 (idempotent)
-echo "[1/4] ~/.claude/.env 환경변수 설정"
+echo "[1/5] ~/.claude/.env 환경변수 설정"
 mkdir -p ~/.claude
 ENV_FILE="$HOME/.claude/.env"
 touch "$ENV_FILE"
@@ -128,7 +145,7 @@ set_env_var "AIOPS_TENANT_ID"  "$TENANT_ID"
 echo "    완료"
 
 # 2) 레포를 백엔드에 자동 등록 (활성 프로젝트로 설정됨)
-echo "[2/4] 레포 자동 등록 → $REPO_NAME"
+echo "[2/5] 레포 자동 등록 → $REPO_NAME"
 REG_BODY=$(cat <<JSON
 {{"name": "$REPO_NAME", "repoPath": "$REPO_ROOT", "gitUrl": ""}}
 JSON
@@ -147,7 +164,7 @@ else
 fi
 
 # 3) Claude Code Hook 설치
-echo "[3/4] Claude Code Hook 설치"
+echo "[3/5] Claude Code Hook 설치"
 cd "$REPO_ROOT"
 mkdir -p .claude/hooks \\
     .aiops/hooks .aiops/prompts \\
@@ -198,8 +215,68 @@ with open(path, "w") as f:
 PYEOF
 echo "    완료 (settings.json 갱신)"
 
-# 4) 연결 테스트 ping
-echo "[4/4] 연결 테스트 ping 전송"
+# 4) 초기 .md 자산 push — Hermes 위키 빌더와 RAG 입력이 된다.
+#    이후 변경분은 PostToolUse Hook이 자동 sync.
+echo "[4/5] 프로젝트 .md 자산 push"
+REPO_ROOT="$REPO_ROOT" API_BASE="$API_BASE" API_KEY="$API_KEY" PROJECT_NAME="$REPO_NAME" \
+python3 - <<'PYEOF'
+import json, os, urllib.request, urllib.error
+REPO_ROOT = os.environ["REPO_ROOT"]
+API_BASE  = os.environ["API_BASE"]
+API_KEY   = os.environ["API_KEY"]
+PROJECT   = os.environ["PROJECT_NAME"]
+
+SKIP = {{".git", "node_modules", ".aiops", "venv", ".venv",
+        "__pycache__", "build", "dist", "out", "target",
+        ".idea", ".vscode", ".gradle", ".run"}}
+MAX_BYTES = 900_000  # 서버 1MB 제한 안전 마진
+BATCH = 100
+
+items = []
+for root, dirs, files in os.walk(REPO_ROOT):
+    dirs[:] = [d for d in dirs if d not in SKIP]
+    for fn in files:
+        if not fn.lower().endswith(".md"):
+            continue
+        full = os.path.join(root, fn)
+        rel = os.path.relpath(full, REPO_ROOT).replace(os.sep, "/")
+        try:
+            text = open(full, "r", encoding="utf-8", errors="ignore").read()
+        except Exception:
+            continue
+        size = len(text.encode("utf-8"))
+        if size > MAX_BYTES:
+            print("    skip(>900KB): " + rel)
+            continue
+        items.append({{"path": rel, "content": text, "size_bytes": size}})
+
+def send(batch):
+    body = json.dumps({{"project_name": PROJECT, "items": batch}}).encode("utf-8")
+    req = urllib.request.Request(
+        API_BASE + "/api/assets/sync", data=body, method="POST",
+        headers={{"Content-Type": "application/json", "X-API-Key": API_KEY}},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, ""
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "ignore")[:200]
+    except Exception as e:
+        return 0, str(e)[:200]
+
+sent, total = 0, len(items)
+for i in range(0, total, BATCH):
+    code, err = send(items[i:i+BATCH])
+    if code == 200:
+        sent += len(items[i:i+BATCH])
+    else:
+        print("    경고: HTTP " + str(code) + " " + err)
+
+print("    " + str(sent) + "/" + str(total) + " .md 자산 push 완료")
+PYEOF
+
+# 5) 연결 테스트 ping
+echo "[5/5] 연결 테스트 ping 전송"
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 PING_BODY=$(cat <<JSON
 {{"category":"hooks","payload":{{"ts":"$TS","hook":"install_test","script":"install.sh","exit":0,"ms":0,"repo":"$REPO_NAME"}}}}

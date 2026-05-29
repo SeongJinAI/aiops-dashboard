@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova — 부산에서, AI로 진짜 뭔가 해내는 법</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+/* ============================================================
+ * Nova — Pitch Deck. 제품과 동일한 oklch 디자인 토큰.
+ * 다크 기본. ← → / Space 로 이동, T 로 라이트 토글, F 로 전체화면.
+ * ============================================================ */
+:root[data-theme="dark"]{
+  --bg:oklch(0.145 0 0); --surface:oklch(0.205 0 0); --surface-alt:oklch(0.27 0 0);
+  --border:oklch(0.27 0 0); --border-active:oklch(0.50 0 0); --divider:oklch(0.24 0 0);
+  --text:oklch(0.985 0 0); --text-dim:oklch(0.72 0 0); --text-faint:oklch(0.55 0 0);
+  --accent:oklch(0.66 0.20 270); --accent-hover:oklch(0.72 0.20 270);
+  --accent-soft:oklch(0.30 0.08 270); --accent-soft-fg:oklch(0.82 0.16 270);
+  --success:oklch(0.72 0.16 145); --success-soft:oklch(0.30 0.06 145);
+  --warning:oklch(0.80 0.16 75); --warning-soft:oklch(0.32 0.07 75);
+  --danger:oklch(0.70 0.20 25); --danger-soft:oklch(0.32 0.07 25);
+  --info:oklch(0.74 0.15 235); --info-soft:oklch(0.30 0.06 235);
+  --purple:oklch(0.68 0.22 295); --purple-soft:oklch(0.30 0.07 295);
+  --cyan:oklch(0.74 0.13 215); --cyan-soft:oklch(0.30 0.05 215);
+}
+:root[data-theme="light"]{
+  --bg:oklch(0.985 0 0); --surface:oklch(1 0 0); --surface-alt:oklch(0.96 0 0);
+  --border:oklch(0.92 0 0); --border-active:oklch(0.80 0 0); --divider:oklch(0.94 0 0);
+  --text:oklch(0.205 0 0); --text-dim:oklch(0.45 0 0); --text-faint:oklch(0.62 0 0);
+  --accent:oklch(0.50 0.20 270); --accent-hover:oklch(0.44 0.20 270);
+  --accent-soft:oklch(0.95 0.04 270); --accent-soft-fg:oklch(0.42 0.20 270);
+  --success:oklch(0.60 0.16 145); --success-soft:oklch(0.95 0.05 145);
+  --warning:oklch(0.62 0.17 75); --warning-soft:oklch(0.96 0.06 75);
+  --danger:oklch(0.58 0.20 25); --danger-soft:oklch(0.96 0.05 25);
+  --info:oklch(0.55 0.16 235); --info-soft:oklch(0.96 0.05 235);
+  --purple:oklch(0.55 0.22 295); --purple-soft:oklch(0.95 0.05 295);
+  --cyan:oklch(0.55 0.13 215); --cyan-soft:oklch(0.95 0.04 215);
+}
+:root{
+  --font-sans:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",Roboto,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;overflow:hidden;}
+::selection{background:var(--accent-soft);color:var(--accent-soft-fg);}
+
+/* ---------- deck shell ---------- */
+.deck{position:fixed;inset:0;}
+.slide{
+  position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+  padding:clamp(40px,7vh,90px) clamp(48px,9vw,160px);
+  opacity:0;transform:translateY(14px);transition:opacity .45s ease,transform .45s ease;overflow-y:auto;
+}
+.slide.active{display:flex;opacity:1;transform:none;}
+.slide.center{align-items:center;text-align:center;}
+
+/* background atmosphere */
+.deck::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(900px 500px at 78% -8%, var(--accent-soft), transparent 60%),
+    radial-gradient(700px 500px at -5% 108%, var(--purple-soft), transparent 55%);
+  opacity:.55;
+}
+.deck::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.04;
+  background-image:linear-gradient(var(--text) 1px,transparent 1px),linear-gradient(90deg,var(--text) 1px,transparent 1px);
+  background-size:48px 48px;
+  -webkit-mask-image:radial-gradient(circle at 50% 45%,#000,transparent 78%);
+          mask-image:radial-gradient(circle at 50% 45%,#000,transparent 78%);
+}
+.slide>*{position:relative;z-index:1;}
+
+/* ---------- type ---------- */
+.eyebrow{font-family:var(--font-mono);font-size:clamp(11px,1.1vw,14px);letter-spacing:.22em;text-transform:uppercase;color:var(--accent-soft-fg);margin-bottom:22px;display:flex;align-items:center;gap:10px;}
+.eyebrow::before{content:"";width:26px;height:2px;background:var(--accent);border-radius:2px;}
+.slide.center .eyebrow{justify-content:center;}
+h1{font-size:clamp(34px,6.2vw,82px);line-height:1.04;letter-spacing:-0.03em;font-weight:800;}
+h2{font-size:clamp(28px,4.6vw,58px);line-height:1.08;letter-spacing:-0.025em;font-weight:800;}
+h3{font-size:clamp(20px,2.4vw,30px);line-height:1.2;letter-spacing:-0.015em;font-weight:700;}
+.lead{font-size:clamp(17px,1.9vw,25px);line-height:1.55;color:var(--text-dim);font-weight:400;max-width:60ch;}
+.slide.center .lead{margin-left:auto;margin-right:auto;}
+.big{font-size:clamp(30px,5vw,64px);line-height:1.12;letter-spacing:-0.025em;font-weight:800;}
+.accent{color:var(--accent);}
+.grad{background:linear-gradient(100deg,var(--accent),var(--purple) 70%,var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.dim{color:var(--text-dim);}
+.faint{color:var(--text-faint);}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+strong{font-weight:700;color:var(--text);}
+.mt-s{margin-top:14px;} .mt-m{margin-top:24px;} .mt-l{margin-top:40px;} .mt-xl{margin-top:56px;}
+.maxw{max-width:1100px;} .maxw-s{max-width:780px;}
+
+/* ---------- chips / badges ---------- */
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:5px 12px;border-radius:9999px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);}
+.chip.accent{background:var(--accent-soft);border-color:transparent;color:var(--accent-soft-fg);}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.badge-new{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--success);background:var(--success-soft);padding:6px 13px;border-radius:8px;font-weight:700;}
+
+/* ---------- title slide ---------- */
+.brand{display:flex;align-items:center;gap:16px;margin-bottom:34px;}
+.mark{width:54px;height:54px;flex:none;}
+.mk-bg{fill:var(--accent-soft);stroke:var(--accent);}
+.mk-fg{fill:var(--accent);}
+.brand-name{font-size:30px;font-weight:800;letter-spacing:-0.02em;}
+.brand-name span{color:var(--accent);}
+.title-foot{margin-top:auto;padding-top:48px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;color:var(--text-faint);font-size:15px;}
+
+/* ---------- value chain ---------- */
+.chain{display:flex;align-items:stretch;gap:18px;flex-wrap:wrap;}
+.chain .node{flex:1;min-width:210px;border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:26px;position:relative;overflow:hidden;}
+.chain .node .k{font-family:var(--font-mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);}
+.chain .node h3{margin-top:8px;}
+.chain .node p{margin-top:10px;color:var(--text-dim);font-size:15px;line-height:1.5;}
+.chain .node .bar{position:absolute;left:0;top:0;bottom:0;width:4px;}
+.chain .node.t1 .bar{background:var(--cyan);} .chain .node.t1 .k{color:var(--cyan);}
+.chain .node.t2 .bar{background:var(--purple);} .chain .node.t2 .k{color:var(--purple);}
+.chain .node.t3 .bar{background:var(--accent);} .chain .node.t3 .k{color:var(--accent);}
+.chain .arrow{align-self:center;color:var(--text-faint);font-size:26px;}
+@media(max-width:880px){.chain .arrow{display:none;}}
+
+/* ---------- step list / principles ---------- */
+.steps{display:flex;flex-direction:column;gap:18px;}
+.step{display:flex;gap:20px;align-items:flex-start;}
+.step .n{font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--accent);width:42px;height:42px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:11px;background:var(--surface);}
+.step .body h3{font-size:clamp(19px,2vw,26px);}
+.step .body p{color:var(--text-dim);font-size:16px;margin-top:5px;line-height:1.5;max-width:70ch;}
+
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+@media(max-width:880px){.cols{grid-template-columns:1fr;}}
+.card{border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:24px;}
+.card .ic{font-size:22px;}
+.card h3{margin-top:12px;font-size:20px;}
+.card p{margin-top:8px;color:var(--text-dim);font-size:15px;line-height:1.5;}
+
+/* ---------- pain list ---------- */
+.pain{display:flex;flex-direction:column;gap:14px;max-width:760px;}
+.pain li{list-style:none;display:flex;gap:14px;align-items:center;font-size:clamp(17px,1.8vw,22px);color:var(--text-dim);}
+.pain li .x{color:var(--danger);font-weight:700;font-family:var(--font-mono);flex:none;}
+.pain li strong{color:var(--text);}
+
+/* ---------- stat grid ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+@media(max-width:880px){.stats{grid-template-columns:repeat(2,1fr);}}
+.stat{border:1px solid var(--border);background:var(--surface);border-radius:13px;padding:22px;}
+.stat .num{font-size:clamp(30px,3.6vw,46px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;}
+.stat .lab{margin-top:6px;font-size:14px;color:var(--text-dim);}
+.stat .sub{margin-top:3px;font-size:12px;color:var(--text-faint);font-family:var(--font-mono);}
+
+/* ============================================================
+ * APP MOCKUP — 제품 다크 UI 재현 (브라우저 프레임)
+ * ============================================================ */
+.app-frame{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 24px 80px rgb(0 0 0 / .5);}
+.app-bar{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--surface-alt);border-bottom:1px solid var(--border);}
+.app-bar .d{width:11px;height:11px;border-radius:50%;background:var(--border-active);}
+.app-url{margin-left:10px;font-family:var(--font-mono);font-size:12px;color:var(--text-faint);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:4px 12px;}
+.app-body{padding:22px;background:var(--bg);}
+.app-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;}
+.app-title{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.app-sub{font-size:12px;color:var(--text-dim);margin-top:3px;}
+.box{border:1px solid var(--border);background:var(--surface);border-radius:11px;padding:16px;}
+.box+.box{margin-top:14px;}
+.box-h{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+
+/* coach score mock */
+.coach-hero{display:flex;gap:26px;align-items:center;flex-wrap:wrap;}
+.score{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:120px;}
+.score .n{font-size:58px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.03em;}
+.score .n s{font-size:22px;color:var(--text-faint);text-decoration:none;font-weight:700;}
+.score .g{font-size:13px;font-weight:700;padding:3px 12px;border-radius:9999px;background:var(--accent-soft);color:var(--accent-soft-fg);}
+.metrics{flex:1;min-width:280px;display:flex;flex-direction:column;gap:14px;}
+.metric .mh{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px;}
+.metric .mh .v{font-family:var(--font-mono);color:var(--text-dim);}
+.meter{height:8px;background:var(--surface-alt);border-radius:9999px;overflow:hidden;}
+.meter i{display:block;height:100%;border-radius:9999px;background:var(--accent);}
+.meter i.ok{background:var(--success);} .meter i.warn{background:var(--warning);}
+.headline{margin-top:18px;font-size:14px;font-weight:600;padding:12px 16px;background:var(--accent-soft);border:1px solid var(--border);border-radius:9px;display:flex;gap:9px;align-items:center;}
+.headline .s{color:var(--accent);}
+
+/* insight cards */
+.insight{border:1px solid var(--border);border-left-width:3px;border-radius:9px;background:var(--surface);padding:13px 16px;}
+.insight+.insight{margin-top:9px;}
+.insight.warn{border-left-color:var(--danger);} .insight.suggest{border-left-color:var(--warning);}
+.insight.good{border-left-color:var(--success);} .insight.info{border-left-color:var(--info);}
+.insight .ih{display:flex;align-items:center;gap:8px;}
+.insight .ih .t{font-size:14px;font-weight:600;flex:1;}
+.insight .ih .ic{font-size:14px;}
+.insight.warn .ic{color:var(--danger);} .insight.suggest .ic{color:var(--warning);}
+.insight.good .ic{color:var(--success);} .insight.info .ic{color:var(--info);}
+.insight .cat{font-size:11px;color:var(--text-faint);border:1px solid var(--border);padding:1px 8px;border-radius:9999px;}
+.insight .d{font-size:13px;color:var(--text-dim);line-height:1.5;margin-top:6px;}
+.insight .act{font-size:13px;color:var(--text);margin-top:8px;padding-top:8px;border-top:1px dashed var(--divider);display:flex;gap:8px;}
+.insight .act .s{color:var(--accent);flex:none;}
+.insight .d code,.insight .act code{font-family:var(--font-mono);font-size:12px;background:var(--surface-alt);padding:1px 5px;border-radius:4px;}
+
+/* hourly bars */
+.barsvg{width:100%;height:120px;display:block;}
+.barsvg rect{fill:var(--accent);opacity:.85;}
+.barsvg rect.peak{fill:var(--accent);opacity:1;}
+.bars-x{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--text-faint);margin-top:6px;}
+
+/* perspective tabs / wiki */
+.ptabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.ptab{font-size:13px;padding:6px 13px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);}
+.ptab.on{background:var(--purple-soft);border-color:transparent;color:var(--text);font-weight:600;}
+.progress{height:9px;background:var(--surface-alt);border-radius:9999px;overflow:hidden;margin:10px 0;}
+.progress i{display:block;height:100%;width:75%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:9999px;}
+.stagerow{display:flex;justify-content:space-between;font-size:12px;color:var(--text-faint);font-family:var(--font-mono);}
+.wikiline{height:9px;background:var(--surface-alt);border-radius:5px;margin:9px 0;}
+.wikiline.w1{width:88%;} .wikiline.w2{width:96%;} .wikiline.w3{width:72%;} .wikiline.h{height:14px;width:46%;background:var(--surface-alt);}
+
+/* mapping slide */
+.map{display:grid;grid-template-columns:1fr auto 1fr;gap:16px 30px;align-items:center;}
+.map .l,.map .r{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:18px 20px;}
+.map .l .k{font-family:var(--font-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);}
+.map .l h3{margin-top:5px;font-size:21px;}
+.map .r .q{font-size:18px;font-weight:600;}
+.map .r p{font-size:14px;color:var(--text-dim);margin-top:4px;}
+.map .eq{color:var(--text-faint);font-size:22px;text-align:center;}
+@media(max-width:880px){.map{grid-template-columns:1fr;}.map .eq{display:none;}}
+
+/* loop diagram */
+.loop{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;}
+.loop .node{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:18px 22px;text-align:center;min-width:180px;}
+.loop .node .k{font-size:13px;color:var(--text-faint);font-family:var(--font-mono);}
+.loop .node h3{margin-top:6px;font-size:19px;}
+.loop .a{color:var(--accent);font-size:24px;}
+
+/* stack chips */
+.stack{display:flex;flex-wrap:wrap;gap:10px;}
+.stack .s{font-family:var(--font-mono);font-size:14px;padding:7px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text-dim);}
+
+/* demo slide */
+.demo-pulse{width:96px;height:96px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin:0 auto 28px;color:var(--accent);animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--accent-soft);}50%{box-shadow:0 0 0 22px transparent;}}
+
+.quote{font-size:clamp(26px,4.4vw,56px);line-height:1.18;letter-spacing:-0.025em;font-weight:800;max-width:18ch;}
+.slide.center .quote{margin:0 auto;}
+
+/* ---------- HUD ---------- */
+.hud{position:fixed;z-index:50;}
+.prog{top:0;left:0;height:3px;background:var(--accent);width:0;transition:width .4s ease;border-radius:0 2px 2px 0;}
+.counter{right:22px;bottom:18px;font-family:var(--font-mono);font-size:13px;color:var(--text-faint);}
+.counter b{color:var(--text);}
+.hint{left:22px;bottom:18px;font-size:12px;color:var(--text-faint);}
+.kbd{font-family:var(--font-mono);background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--text-dim);}
+@media(max-width:880px){.hint{display:none;}}
+.nav-zone{position:fixed;top:0;bottom:0;width:18%;z-index:40;cursor:pointer;}
+.nav-zone.prev{left:0;} .nav-zone.next{right:0;}
+</style>
+</head>
+<body>
+<div class="hud prog" id="prog"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · TITLE -->
+  <section class="slide active">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 48 48" fill="none">
+        <rect x="2" y="2" width="44" height="44" rx="12" class="mk-bg" stroke-width="1.5"/>
+        <path class="mk-fg" d="M24 9l3.6 8.9L36.5 21l-7.2 5.3L31 35 24 30l-7 5 1.7-8.7L11.5 21l8.9-3.1L24 9z"/>
+      </svg>
+      <div class="brand-name">Nova<span>.</span></div>
+    </div>
+    <h1>흩어지는 AI 작업을,<br/><span class="grad">자산으로 바꾸는</span> 대시보드</h1>
+    <p class="lead mt-l">AI로 일한 모든 흔적을 자동으로 수집하고, 공유 가능한 자산으로 바꾸고,<br/>다음 한 걸음까지 코칭합니다. — 제가 AI와 함께 만들고 있는 프로젝트입니다.</p>
+    <div class="title-foot">
+      <div>부산 AI 카르텔 밋업 · 프로젝트 발표</div>
+      <div class="mono">Track → Wikify → Coach</div>
+    </div>
+  </section>
+
+  <!-- 2 · OPENING (가벼운 모임 맥락 → 프로젝트로) -->
+  <section class="slide center">
+    <div class="eyebrow">이 자리에 대해, 딱 한 가지만</div>
+    <h2 class="quote">이 모임은 듣는 자리가 아니라,<br/><span class="accent">가져오는 자리</span>니까.</h2>
+    <p class="lead mt-l">그래서 저도 하나 가져왔습니다.<br/>요즘 제가 AI와 함께 만들고 있는 도구를.</p>
+  </section>
+
+  <!-- 7 · PROBLEM -->
+  <section class="slide">
+    <div class="eyebrow">제가 부딪힌 문제</div>
+    <h2>AI로 일할수록,<br/>제 흔적은 <span class="accent">흩어지고 사라졌습니다.</span></h2>
+    <ul class="pain mt-xl">
+      <li><span class="x">✕</span><span><strong>프롬프트</strong>가 어디 갔는지 모른다 — 좋은 질문도 한 번 쓰고 증발</span></li>
+      <li><span class="x">✕</span><span>AI에게 <strong>같은 설명을 매번 반복</strong>한다</span></li>
+      <li><span class="x">✕</span><span>내 작업 패턴을 <strong>객관적으로 볼 방법</strong>이 없다</span></li>
+      <li><span class="x">✕</span><span><strong>.claude/ 설정·규칙</strong>이 흩어져 관리가 안 된다</span></li>
+    </ul>
+    <p class="lead mt-l">매일 쌓이는 작업이, 아무 자산도 남기지 못한 채 사라지고 있었습니다.</p>
+  </section>
+
+  <!-- 8 · NOVA INTRO -->
+  <section class="slide">
+    <div class="eyebrow">그래서 만들었습니다</div>
+    <h2><span class="grad">Nova</span> — AI 협업 학습 대시보드</h2>
+    <p class="lead mt-m maxw">AI 바이브코딩으로 흩어진 개인 데이터를 <strong>자동 수집·자산화·코칭</strong>하여,<br/>개인의 AI 협업 능력을 <strong>데이터로</strong> 키웁니다.</p>
+    <div class="chain mt-xl">
+      <div class="node t1"><div class="bar"></div><div class="k">01 · Track</div><h3>수집</h3><p>프롬프트·Hook·세션·설정을 자동으로 모은다</p></div>
+      <div class="arrow">→</div>
+      <div class="node t2"><div class="bar"></div><div class="k">02 · Wikify</div><h3>자산화</h3><p>흩어진 .md를 3관점 위키로 자동 빌드</p></div>
+      <div class="arrow">→</div>
+      <div class="node t3"><div class="bar"></div><div class="k">03 · Coach</div><h3>코칭</h3><p>축적 데이터로 다음 한 걸음을 제안</p></div>
+    </div>
+  </section>
+
+  <!-- 9 · TRACK -->
+  <section class="slide">
+    <div class="eyebrow">01 · Track — 수집</div>
+    <h2>일단, <span class="accent">전부 모읍니다.</span></h2>
+    <p class="lead mt-m">Hook 한 줄 설치로, AI와 일한 모든 흔적이 자동으로 쌓입니다. 아래는 제 실제 데이터입니다.</p>
+    <div class="stats mt-xl">
+      <div class="stat"><div class="num mono">1,056</div><div class="lab">프롬프트</div><div class="sub">user prompts</div></div>
+      <div class="stat"><div class="num mono">2,283</div><div class="lab">Hook 실행</div><div class="sub">통과율 100%</div></div>
+      <div class="stat"><div class="num mono">4,114</div><div class="lab">도구 호출</div><div class="sub">tool-use</div></div>
+      <div class="stat"><div class="num mono">240</div><div class="lab">세션</div><div class="sub">SessionStart/Stop</div></div>
+    </div>
+  </section>
+
+  <!-- 10 · TRACK visual -->
+  <section class="slide">
+    <div class="eyebrow">01 · Track — 자기 객관화</div>
+    <h2>데이터는 거짓말을 안 합니다.</h2>
+    <div class="maxw mt-l" style="width:100%;max-width:920px;">
+      <div class="app-frame">
+        <div class="app-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="app-url">nova.local / prompts</span></div>
+        <div class="app-body">
+          <div class="app-head"><div><div class="app-title">⏱ 시간대별 활동 · 24h</div><div class="app-sub">사용자 프롬프트 1,056건의 시간 분포</div></div><div class="chip accent"><span class="dot"></span>peak 16시</div></div>
+          <div class="box">
+            <svg class="barsvg" id="hourly" viewBox="0 0 480 120" preserveAspectRatio="none"></svg>
+            <div class="bars-x"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="lead mt-l"><strong>저는 오전 9시에 켜서 16시에 가장 깊게 몰입합니다.</strong> 막연한 느낌이 아니라, 숫자로요.</p>
+  </section>
+
+  <!-- 11 · WIKIFY -->
+  <section class="slide">
+    <div class="eyebrow">02 · Wikify — 자산화</div>
+    <h2>같은 설명을 두 번 하지 않으려면,<br/><span class="accent">컨텍스트를 자산으로</span> 바꿔야 합니다.</h2>
+    <p class="lead mt-m maxw">흩어진 <span class="mono">.md</span> 문서를 <strong>에이전트</strong>가 3관점 위키로 자동 빌드합니다.
+    실제 한 ERP 프로젝트의 <strong class="mono">252개</strong> 문서가 기획자·개발자·사용자 관점으로 재구성됐습니다.</p>
+    <div class="cols mt-xl">
+      <div class="card"><div class="ic" style="color:var(--purple)">◆</div><h3>기획자 관점</h3><p>왜 만들었는가 · 56개 문서</p></div>
+      <div class="card"><div class="ic" style="color:var(--accent)">◆</div><h3>개발자 관점</h3><p>어떻게 동작하는가 · 147개 문서</p></div>
+      <div class="card"><div class="ic" style="color:var(--cyan)">◆</div><h3>사용자 관점</h3><p>어떻게 쓰는가 · 49개 문서</p></div>
+    </div>
+  </section>
+
+  <!-- 12 · WIKIFY visual -->
+  <section class="slide">
+    <div class="eyebrow">02 · Wikify — 동작</div>
+    <h2>버튼 하나, 버전까지.</h2>
+    <div class="maxw mt-l" style="width:100%;max-width:880px;">
+      <div class="app-frame">
+        <div class="app-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="app-url">nova.local / agent</span></div>
+        <div class="app-body">
+          <div class="app-head"><div><div class="app-title">✦ 에이전트 — 위키 자동 생성</div><div class="app-sub">catalog → planner → developer → user</div></div><div class="chip accent"><span class="dot"></span>building…</div></div>
+          <div class="box">
+            <div class="box-h"><span>빌드 진행</span><span class="mono dim">75%</span></div>
+            <div class="progress"><i></i></div>
+            <div class="stagerow"><span>✓ catalog</span><span>✓ planner</span><span>● developer</span><span class="faint">user</span></div>
+          </div>
+          <div class="box">
+            <div class="ptabs"><span class="ptab on">기획자</span><span class="ptab">개발자</span><span class="ptab">사용자</span><span style="flex:1"></span><span class="ptab">v3 · diff</span></div>
+            <div class="wikiline h"></div><div class="wikiline w1"></div><div class="wikiline w2"></div><div class="wikiline w3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 · COACH setup -->
+  <section class="slide center">
+    <div class="badge-new">★ 이번에 새로 만든 것</div>
+    <h2 class="mt-l">데이터는 쌓이는데…<br/><span class="accent">그래서 뭘 개선하죠?</span></h2>
+    <p class="lead mt-l">수집과 자산화만으로는 부족합니다.<br/>누군가 <strong>"다음 한 걸음"</strong>을 짚어줘야 합니다. 그게 <strong>Coach</strong>입니다.</p>
+  </section>
+
+  <!-- 14 · COACH visual (climax) -->
+  <section class="slide">
+    <div class="eyebrow">03 · Coach — 코칭</div>
+    <h2>당신의 협업을 <span class="grad">점수와 행동</span>으로.</h2>
+    <div class="mt-l" style="width:100%;max-width:980px;">
+      <div class="app-frame">
+        <div class="app-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="app-url">nova.local / coach</span></div>
+        <div class="app-body">
+          <div class="box">
+            <div class="box-h"><span>협업 점수</span></div>
+            <div class="coach-hero">
+              <div class="score"><div class="n">85<s>/100</s></div><div class="g">등급 B</div></div>
+              <div class="metrics">
+                <div class="metric"><div class="mh"><span>명확성</span><span class="v">99</span></div><div class="meter"><i class="ok" style="width:99%"></i></div></div>
+                <div class="metric"><div class="mh"><span>거버넌스</span><span class="v">100</span></div><div class="meter"><i class="ok" style="width:100%"></i></div></div>
+                <div class="metric"><div class="mh"><span>꾸준함</span><span class="v">57</span></div><div class="meter"><i class="warn" style="width:57%"></i></div></div>
+              </div>
+            </div>
+            <div class="headline"><span class="s">✦</span> 지금 협업 흐름이 안정적입니다 — 자산화로 영향력을 키울 차례입니다.</div>
+          </div>
+          <div class="box">
+            <div class="box-h"><span>개선 인사이트</span><span class="cat">4개</span></div>
+            <div class="insight good"><div class="ih"><span class="ic">✓</span><span class="t">Hook 통과율 100% — 거버넌스가 안정적입니다</span><span class="cat">거버넌스</span></div><div class="d">2,283건 실행이 차단 없이 통과. 규칙과 작업 흐름이 잘 정렬돼 있습니다.</div></div>
+            <div class="insight info"><div class="ih"><span class="ic">◷</span><span class="t">주 활동 시간대는 16시 전후입니다</span><span class="cat">패턴</span></div><div class="d">어려운 작업을 이 집중 시간대에 배치하면 효율이 올라갑니다.</div></div>
+            <div class="insight suggest"><div class="ih"><span class="ic">✦</span><span class="t">컨텍스트를 위키로 자산화할 차례입니다</span><span class="cat">효율</span></div><div class="d">반복 설명을 줄이려면 프로젝트 위키를 최신으로 유지하세요.</div><div class="act"><span class="s">↗</span><span>반복 지시는 <code>CLAUDE.md</code>·슬래시 명령으로 정형화하면 토큰을 아끼고 일관성이 올라갑니다.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="lead mt-m">이 점수를 밋업에서 나누면, 코칭은 나 혼자가 아니라 <strong>우리 전체</strong>가 됩니다.</p>
+  </section>
+
+  <!-- 15 · LIVE DEMO -->
+  <section class="slide center">
+    <div class="demo-pulse"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"/></svg></div>
+    <div class="eyebrow">잠깐, 슬라이드를 멈추고</div>
+    <h2>실제로 <span class="accent">보여드리겠습니다.</span></h2>
+    <p class="lead mt-l">Track → Wikify → Coach, 실제 제 데이터로.</p>
+  </section>
+
+  <!-- 16 · HOW (build in public) -->
+  <section class="slide">
+    <div class="eyebrow">어떻게 만들었나 · Building in Public</div>
+    <h2>이 대시보드 자체가,<br/><span class="accent">AI 협업의 산물</span>입니다.</h2>
+    <p class="lead mt-m maxw">앞서 본 그 <strong>1,056개 프롬프트</strong>와 <strong>2,283번의 Hook</strong>이, 바로 이 도구를 만든 흔적입니다.</p>
+    <div class="stack mt-xl">
+      <span class="s">FastAPI</span><span class="s">React 19</span><span class="s">TypeScript</span><span class="s">SQLAlchemy · PostgreSQL</span><span class="s">WebSocket 실시간</span><span class="s">BYOK · Anthropic/OpenAI/Gemini</span><span class="s">Docker · nginx</span>
+    </div>
+    <div class="cols mt-xl">
+      <div class="card"><h3 class="accent">✓ 지금 되는 것</h3><p>Track 전체 · Wikify(위키 자동 생성·버전·diff) · <strong>Coach(방금 추가)</strong> · BYOK 멀티 프로바이더</p></div>
+      <div class="card"><h3 class="dim">◷ 만드는 중</h3><p>RAG 챗봇(pgvector) · 결제 티어 · 에이전트 어그노스틱(Cursor·Antigravity)</p></div>
+      <div class="card"><h3 class="dim">◎ 초대</h3><p>완성품을 자랑하러 온 게 아닙니다. 함께 뜯어보고 만들 <strong>과정</strong>을 가져왔습니다.</p></div>
+    </div>
+  </section>
+
+  <!-- 17 · CONNECTION (가볍게 — 만들고 나서 깨달은 것) -->
+  <section class="slide">
+    <div class="eyebrow">하나 더 — 만들고 나서 깨달은 것</div>
+    <h2>이 도구가 하는 일이,<br/>우리가 모이는 이유와 <span class="accent">닮았더라고요.</span></h2>
+    <div class="map mt-xl maxw">
+      <div class="l"><div class="k">Track</div><h3>수집</h3></div><div class="eq">≈</div><div class="r"><div class="q">"가져오는 자리"</div><p>각자 데이터로 무장해 들고 오는 것.</p></div>
+      <div class="l"><div class="k">Wikify</div><h3>자산화</h3></div><div class="eq">≈</div><div class="r"><div class="q">"인사이트를 나눈다"</div><p>나눌 수 있는 형태로 만들어야 비로소 나눌 수 있는 것.</p></div>
+      <div class="l"><div class="k">Coach</div><h3>코칭</h3></div><div class="eq">≈</div><div class="r"><div class="q">"서로를 끌어올린다"</div><p>데이터가 나를 끌어올리고, 나누면 서로를 끌어올리는 것.</p></div>
+    </div>
+  </section>
+
+  <!-- 18 · CTA -->
+  <section class="slide center">
+    <div class="brand" style="justify-content:center;">
+      <svg class="mark" viewBox="0 0 48 48" fill="none" style="width:42px;height:42px;">
+        <rect x="2" y="2" width="44" height="44" rx="12" class="mk-bg" stroke-width="1.5"/>
+        <path class="mk-fg" d="M24 9l3.6 8.9L36.5 21l-7.2 5.3L31 35 24 30l-7 5 1.7-8.7L11.5 21l8.9-3.1L24 9z"/>
+      </svg>
+    </div>
+    <h2 class="mt-m">저는 오늘 <span class="accent">Nova</span>를 가져왔습니다.</h2>
+    <p class="big grad mt-m">같이 써보고, 같이 뜯어볼 사람?</p>
+    <p class="lead mt-l">피드백·합류·뭐든 환영합니다. 그리고 다음엔, 여러분 차례고요.</p>
+    <p class="lead mt-s faint">들어주셔서 고맙습니다.</p>
+  </section>
+
+</div>
+
+<!-- nav zones -->
+<div class="nav-zone prev" id="zprev"></div>
+<div class="nav-zone next" id="znext"></div>
+
+<!-- HUD -->
+<div class="hud counter" id="counter"><b>01</b> / 20</div>
+<div class="hud hint"><span class="kbd">←</span> <span class="kbd">→</span> 이동 · <span class="kbd">T</span> 라이트 · <span class="kbd">F</span> 전체화면</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var i = 0;
+  var prog = document.getElementById('prog');
+  var counter = document.getElementById('counter');
+
+  function pad(n){ return (n<10?'0':'')+n; }
+  function show(n){
+    i = Math.max(0, Math.min(total-1, n));
+    slides.forEach(function(s,idx){ s.classList.toggle('active', idx===i); });
+    prog.style.width = ((i)/(total-1)*100) + '%';
+    counter.innerHTML = '<b>'+pad(i+1)+'</b> / '+pad(total);
+    location.hash = i+1;
+  }
+  function next(){ show(i+1); }
+  function prev(){ show(i-1); }
+
+  document.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){ e.preventDefault(); next(); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); prev(); }
+    else if(e.key==='Home'){ show(0); }
+    else if(e.key==='End'){ show(total-1); }
+    else if(e.key==='t'||e.key==='T'){ var r=document.documentElement; r.dataset.theme = r.dataset.theme==='dark'?'light':'dark'; }
+    else if(e.key==='f'||e.key==='F'){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); } else { document.exitFullscreen&&document.exitFullscreen(); } }
+  });
+  document.getElementById('znext').addEventListener('click', next);
+  document.getElementById('zprev').addEventListener('click', prev);
+
+  // hourly bar chart (실제 데이터)
+  var hourly = [0,0,0,0,0,0,0,1,50,125,140,67,78,90,135,105,174,89,2,0,0,0,0,0];
+  var svg = document.getElementById('hourly');
+  if(svg){
+    var max=174, W=480, H=120, n=hourly.length, gap=4, bw=(W-gap*(n-1))/n;
+    var peak = hourly.indexOf(max);
+    var html='';
+    hourly.forEach(function(v,idx){
+      var h = v===0?2:Math.max(3, v/max*(H-12));
+      var x = idx*(bw+gap), y = H-h;
+      html += '<rect class="'+(idx===peak?'peak':'')+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2"/>';
+    });
+    svg.innerHTML = html;
+  }
+
+  var start = parseInt((location.hash||'').replace('#',''),10);
+  show(isNaN(start)?0:start-1);
+})();
+</script>
+</body>
+</html>

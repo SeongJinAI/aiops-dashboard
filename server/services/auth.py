@@ -50,20 +50,19 @@ async def verify_api_key_db(api_key: str) -> str | None:
 
     DB가 초기화되지 않은 local 모드 등에서는 None을 반환하여 env 폴백으로 넘어간다.
     """
-    import aiosqlite
-    from services.db import DB_PATH
+    from sqlalchemy import select
+    from models.db_models import Tenant
+    from services.database import session_scope
 
     key_hash = hash_api_key(api_key)
     try:
-        async with aiosqlite.connect(str(DB_PATH)) as conn:
-            conn.row_factory = aiosqlite.Row
-            cursor = await conn.execute(
-                "SELECT id FROM tenants WHERE api_key_hash = ?", (key_hash,)
-            )
-            row = await cursor.fetchone()
+        async with session_scope() as s:
+            tenant_id = (
+                await s.execute(select(Tenant.id).where(Tenant.api_key_hash == key_hash))
+            ).scalar_one_or_none()
+        return tenant_id
     except Exception:
         return None
-    return row["id"] if row else None
 
 
 def hash_api_key(key: str) -> str:

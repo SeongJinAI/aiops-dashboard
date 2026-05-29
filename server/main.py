@@ -20,7 +20,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from services.rate_limit import limiter
 
-from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts, hermes, secrets as secrets_router
+from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts, hermes, secrets as secrets_router, assets as assets_router, coach, billing, library
 from services.log_reader import get_log_dir, watch_log_files
 from services.log_store import AIOPS_MODE
 
@@ -96,6 +96,10 @@ app.include_router(claude_config.router, prefix="/api/claude-config")
 app.include_router(scripts.router, prefix="/api/scripts")
 app.include_router(hermes.router, prefix="/api/hermes")
 app.include_router(secrets_router.router, prefix="/api/secrets")
+app.include_router(assets_router.router, prefix="/api/assets")
+app.include_router(coach.router, prefix="/api/coach")
+app.include_router(billing.router, prefix="/api/billing")
+app.include_router(library.router, prefix="/api/library")
 
 
 @app.websocket("/ws/logs")
