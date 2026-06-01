@@ -18,6 +18,7 @@ export const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { id: 'home', label: '홈', icon: 'home', path: '/' },
       { id: 'coach', label: '코치', icon: 'lightbulb', path: '/coach' },
+      { id: 'chat', label: '지식 챗', icon: 'search', path: '/chat' },
       { id: 'prompts', label: '프롬프트', icon: 'message-square', path: '/prompts' },
       { id: 'library', label: '프롬프트 라이브러리', icon: 'copy', path: '/library', count: 'Pro' },
       { id: 'misunderstandings', label: '오해 추적', icon: 'alert-circle', path: '/misunderstandings' },
@@ -37,9 +38,6 @@ export const SIDEBAR_GROUPS: NavGroup[] = [
 /** nav에서 빠졌지만 직접 접근 가능한 경로의 라벨 (breadcrumb 보정) */
 const OFF_NAV_LABELS: Record<string, string> = {
   '/project-swap': '프로젝트',
-  '/repo-map': '레포 관계도',
-  '/workflow': '워크플로우',
-  '/claude-config': 'Claude 설정',
 };
 
 /** path → 라벨 (TopBar breadcrumb, CommandPalette) */

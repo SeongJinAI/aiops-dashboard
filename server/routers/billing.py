@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from middleware.auth import get_current_user
-from services import billing
+from services import billing, usage
 from services.rate_limit import limiter
 
 router = APIRouter()
@@ -20,6 +20,13 @@ router = APIRouter()
 async def status(user: dict = Depends(get_current_user)):
     sub = await billing.get_subscription(user["tenant_id"])
     return {**sub, "plans": billing.PLANS}
+
+
+@router.get("/usage")
+async def usage_status(user: dict = Depends(get_current_user)):
+    """이번 달 관리형 AI 사용량 + 남은 한도."""
+    sub = await billing.get_subscription(user["tenant_id"])
+    return await usage.get_usage(user["tenant_id"], sub["plan"])
 
 
 class CheckoutRequest(BaseModel):

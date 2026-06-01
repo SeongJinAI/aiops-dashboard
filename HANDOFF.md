@@ -1,5 +1,181 @@
 # HANDOFF.md
 
+## 2026.06.01 (이어서 3) — 관리형 AI + 요청 수 쿼터 (판매 모델) + BYOK 보안 점검
+
+### 한 줄 요약
+
+> 타겟이 **비개발자 바이브코더**라, BYOK 대신 **개발자가 커스텀한 관리형 AI(Nova 키)를 제공 + 월 요청 수 쿼터**로 비용 통제. 결제만 붙이면 판매 가능한 형태. BYOK는 파워유저 오버라이드로 유지. BYOK 키 보관은 이미 견고(AES-256-GCM, 암호문만, prod 마스터키 강제) — 보강 포인트는 보관 방식이 아니라 마스터키/관리형키 custody(prod는 KMS).
+
+### 사용자 결정 (AskUserQuestion)
+
+- 키 모델: **관리형(Nova가 LLM 제공, 비용 부담)** — 비개발자 대상이라 개발자가 시스템 프롬프트 커스텀해 제공. · 쿼터 기준: **요청 수(MVP)**.
+
+### 이번 세션 완료 작업
+
+**#1 관리형 LLM + 쿼터 (백엔드)** ✅
+- `LLMUsage` 테이블(tenant·period(YYYY-MM)·count, create_all 자동). `services/usage.py`: `quota_for`·`try_consume`(조건부 UPDATE 원자 증가)·`get_usage`·`QuotaExceeded`. 쿼터 env(`NOVA_QUOTA_FREE`=5/`NOVA_QUOTA_PRO`=500).
+- `services/managed_llm.py`: **BYOK 우선(미터링 없음) → 없으면 관리형 키(env) + plan 쿼터 차감**. 관리형 provider 고정(`NOVA_LLM_PROVIDER`, 기본 anthropic). 관리형 키 미설정+BYOK 없음 → `LLMNotConfigured`.
+- `coach.synthesize`·`prompt_library.distill`·`rag.answer`를 `managed_llm.complete`로 라우팅(시스템 프롬프트는 그대로 = 개발자 커스텀).
+- 라우터: coach/library `/summary`·`/distill`에 `QuotaExceeded`→429(`E.QUOTA_EXCEEDED`), chat `/query`는 쿼터초과 시 검색결과로 degrade. `GET /api/billing/usage`. PLANS에 관리형 쿼터 문구.
+- 검증: try_consume(quota=3)×4=[T,T,T,F], /usage shape, 키없음→400, 쿼터초과→429, 라이브 /billing/usage {used:0,quota:5}.
+
+**#2 프론트** ✅
+- `Subscribe.tsx`에 "이번 달 관리형 AI 사용량" 카드(used/quota meter + 안내). 쿼터초과 429는 기존 apiPost 토스트가 메시지 노출, chat은 degrade 메시지.
+- 빌드 통과(1944 모듈, tsc 0).
+
+### 운영 설정 (판매 전 필수)
+
+- 관리형 키: `NOVA_LLM_PROVIDER=anthropic` + 해당 provider env 키(예: `ANTHROPIC_API_KEY=<관리형 키>`). **이 키도 critical secret** — 누출 시 우리 비용 폭주. prod는 KMS/Secrets Manager.
+- `HERMES_MASTER_KEY`(BYOK 복호화) + `JWT_SECRET`: prod(`AIOPS_ENV=prod`)에서 기동 거부로 강제됨. **배포 시 `AIOPS_ENV=prod` 설정 필수**(미설정 시 dev 기본값 silent).
+- 쿼터 조정: `NOVA_QUOTA_FREE`/`NOVA_QUOTA_PRO`.
+
+### 다음 세션에 할 작업
+
+- **결제 실연동(Lemon Squeezy)** — 이거 하나면 판매 가능. webhook→plan 갱신, prod 가드.
+- 남은 보안 하드닝(Tier 4): CORS 메서드/헤더 제한, logs target_date path traversal 검증, rate limit 미세조정.
+- 토큰 기준 쿼터(비용 정확) 업그레이드 — 현재 요청 수.
+
+### 주의사항
+
+- **BYOK 있으면 미터링 안 함**(본인 비용). 관리형(env 키)일 때만 쿼터 차감.
+- 쿼터는 월 단위(period=UTC YYYY-MM). 월 바뀌면 자동 리셋(새 row).
+- 백엔드 재시작해야 반영(완료). vite 폴링 자동.
+
+### 관련 파일
+
+**신규**: `server/services/usage.py`, `server/services/managed_llm.py`
+**변경(백엔드)**: `models/db_models.py`(LLMUsage), `services/{coach,prompt_library,rag,billing,errors}.py`, `routers/{coach,library,chat,billing}.py`
+**변경(프론트)**: `pages/Subscribe.tsx`
+
+---
+
+## 2026.06.01 (이어서 2) — 컨벤션 정리(로깅/에러코드) + 발표 자료 업데이트
+
+### 한 줄 요약
+
+> 감사 Tier 5 컨벤션 적용: **중앙 에러 레지스트리**(`services/errors.py`의 `E`/`err`)로 ERR_* 코드+메시지 SSOT화, **중앙 로깅 핸들러**(main.py)로 4xx=warning·5xx=error 자동 로깅, print/silent-except 제거. 발표 덱을 진화한 제품(지식 문서 생성 skill + RAG 지식 챗 되먹임, 코칭 SaaS, 퍼널/프리미엄)에 맞춰 갱신.
+
+### 이번 세션 완료 작업
+
+**#1 컨벤션 — 로깅 레벨 + 에러코드 중앙관리** ✅
+- `services/errors.py` 신규: `class E`(ERR_* 코드 + HTTP 상태 + 메시지) + `err(entry, detail?)`. 예외 4계층 매핑. 문자열 리터럴 직접 사용 제거의 SSOT.
+- `main.py`: `StarletteHTTPException` 핸들러로 **4xx=warning / 5xx=error** 중앙 로깅(`logging` 설정), `Exception` 핸들러로 미처리 예외 error 로깅+500. (라이브 확인: `WARNING nova: 401/402 METHOD path → detail`.)
+- 적용: `hermes.py`(활성프로젝트 3중 메시지/상태 불일치 → `E.NO_ACTIVE_PROJECT` 통일, local-repo·perspective·run·version·in-progress도 `E`로), `secrets.py`(print 제거 — 중앙 핸들러가 로깅), `projects.py`(silent except → logger.warning), `middleware/auth.py`(require_premium/flexible 401 → `E`), `chat.py`·`coach.py`·`library.py`(LLM 503 → `E.LLM_PROVIDER`).
+- 검증: 전 라우터 import OK, TestClient로 401/402 응답·로그 확인.
+
+**#2 발표 자료 업데이트** ✅
+- `발표/발표자료.html`(14슬라이드 유지): **Wikify를 "지식 루프"로 강화** — "AI가 만든 지식을 AI가 다시 읽는다"(문서생성 skill→색인→RAG 되먹임 loop 다이어그램), 비주얼은 **지식 챗(RAG) 목업**(질문→답변+출처). 로드맵 갱신(지금 되는 것: 지식문서 skill+RAG·Coach·라이브러리·퍼널 / 만드는 중: 임베딩·결제 실연동). Nova 인트로 Wikify 노드·데모 슬라이드 문구 갱신. 구식 잔재(252개·RAG 챗봇 pgvector·위키 빌드) 제거.
+- `발표/데모-스크립트.md`: Wikify 데모 섹션을 지식 챗(색인→질문→출처)+/nova-recall 되먹임으로 재작성, 동선 표 갱신.
+
+### 다음 세션에 할 작업
+
+- 미룬 **Tier 4(보안 하드닝)**: JWT_SECRET saas 강제, rate limit 테넌트별, path traversal(logs target_date) 검증, CORS 제한, 키 에러메시지 일반화.
+- 임베딩 벡터 검색(RAG 업그레이드), 결제 실연동(맨 마지막).
+- 에러 레지스트리를 나머지 라우터(repos/assets/scripts 등)에도 점진 확대(현재는 신규/플래그 지점 위주).
+
+### 주의사항
+
+- **중앙 로깅**: 모든 HTTPException이 status별로 로깅됨(4xx warn/5xx error). `AIOPS_LOG_LEVEL` env로 레벨 조정.
+- **에러 추가 시**: `services/errors.py`의 `E`에 항목 추가 후 `raise err(E.X)`. 문자열 리터럴 직접 raise 지양.
+- 백엔드 재시작해야 반영(완료). vite는 폴링이라 자동.
+
+### 관련 파일
+
+**신규**: `server/services/errors.py`
+**변경(백엔드)**: `server/main.py`(로깅+핸들러), `routers/{hermes,secrets,projects,chat,coach,library}.py`, `middleware/auth.py`
+**변경(발표)**: `발표/발표자료.html`, `발표/데모-스크립트.md`
+
+---
+
+## 2026.06.01 (이어서) — RAG 지식 챗 (되먹임 루프 완성) + vite 폴링 fix
+
+### 한 줄 요약
+
+> 지식 문서 생성(skill)의 나머지 반쪽 — **생성된 docs → 색인 → 검색 → AI 답변**으로 되먹이는 RAG 루프. 검색은 **어휘 TF-IDF(키/임베딩/pgvector 불필요, 한글 char-bigram으로 조사 문제 해결)**라 항상 동작, 합성 답변만 BYOK. 대시보드 **지식 챗 페이지** + 로컬 **nova-recall skill**(작업 전 지식 회상)로 양쪽 소비. WSL stale-vite 근본 원인(파일 감시 미동작) 폴링으로 영구 해결.
+
+### 이번 세션 완료 작업
+
+**#1 RAG 백엔드** ✅
+- `DocChunk` 테이블(create_all 자동). `services/rag.py`: 마크다운 청킹(헤딩/문단 ~900자) + **어휘 검색**(TF-IDF, 한글 bigram + 영문 단어 토큰, 정확구절 보너스) + BYOK LLM 합성(출처 [번호] 인용).
+- `routers/chat.py`: `GET /status`·`POST /index`·`POST /query`. **JWT 또는 X-API-Key 둘 다 허용**(`middleware/auth.py:get_tenant_flexible` — 대시보드+로컬 skill 공용). 키 없으면 검색결과만 반환(검색은 키리스).
+- 검증: 실자산 3건 색인→검색 정확("로그인 인증 흐름"→login.md, "PostgreSQL 스키마"→db.md, "시작하기 가이드"→start.md). 무인증 401. 토크나이저 조사문제 해결 확인.
+
+**#2 RAG 프론트** ✅
+- `pages/Chat.tsx`: 질문→답변(markdown)+출처 카드+색인 갱신. nav 코칭 섹션에 **지식 챗**(`/chat`, search 아이콘) 3번째. 빈 상태=색인 안내.
+
+**#3 nova-recall skill** ✅
+- 번들에 추가(이제 **7종**). 작업 전 `~/.claude/.env`의 키로 `/api/chat/query` 조회→관련 docs를 컨텍스트로. install.sh 안내 갱신.
+
+**#4 vite 폴링 fix** ✅
+- `vite.config.ts`에 `server.watch.usePolling`. WSL `/mnt/c`는 fs.watch 미동작 → HMR이 변경을 놓쳐 이번 세션 내내 "stale vite"였음. 폴링으로 해결.
+
+### 검증
+
+- `npm run build` 통과(1944 모듈, tsc 0). 백엔드 import OK. skills.tar 7종. install.sh /nova-recall 포함. 라이브: chat/status 401, 프론트 App.tsx Chat 반영 확인.
+
+### 다음 세션에 할 작업
+
+- **임베딩 벡터 검색**(선택 업그레이드): DocChunk에 embedding 컬럼 + BYOK 임베딩(OpenAI/Gemini) → 어휘+벡터 하이브리드. 지금은 어휘만.
+- 더 풍부한 자산으로 RAG 데모(install.sh를 실제 프로젝트에 돌려 docs 채우기).
+- 앞서 미룬 Tier 4(보안)·Tier 5(컨벤션). 결제(맨 마지막).
+
+### 주의사항
+
+- **RAG 검색은 키 없이 동작**(어휘). 합성 답변만 BYOK. 데모 안전.
+- 색인은 활성 프로젝트의 `assets`(.md) 대상. assets가 비면 색인 0 → "색인 갱신" 후에도 0이면 install.sh로 .md를 push해야 함.
+- `get_tenant_flexible`는 JWT/X-API-Key 둘 다 — nova-recall이 X-API-Key로 호출.
+- 백엔드 재시작해야 새 라우트 반영. **vite는 이제 폴링이라 자동 반영**(이전 stale 문제 해소).
+
+### 관련 파일
+
+**백엔드 신규**: `services/rag.py`, `routers/chat.py`, `server/scripts/skills/nova-recall/SKILL.md`
+**백엔드 변경**: `models/db_models.py`(DocChunk), `middleware/auth.py`(get_tenant_flexible), `main.py`(chat 등록), `routers/scripts.py`(recall 안내)
+**프론트 신규/변경**: `pages/Chat.tsx`, `constants/nav.ts`, `App.tsx`, `styles/ui.css`(chat), `vite.config.ts`(폴링)
+
+---
+
+## 2026.06.01 — 지식 문서 생성 skill 번들 + install.sh 설치 (신규 프로젝트 프로비저닝)
+
+### 한 줄 요약
+
+> Nova는 신규 프로젝트 모니터링 도구 → install.sh가 모니터링 Hook뿐 아니라 **지식 문서 생성 skill 6종을 프로젝트의 `.claude/skills/`에 설치**한다. 개발자의 Claude Code가 그 skill을 실행해 `docs/*.md`를 생성(서버 LLM 비용 0) → 기존 자산 sync로 Nova에 되먹임 → Wikify/RAG 입력. "지식 문서 생성"(#1)과 "프롬프트 관리"(#3)를 로컬 skill로 실현.
+
+### 이번 세션 완료 작업
+
+**#1 지식 문서 생성 skill 6종** ✅ (`server/scripts/skills/<name>/SKILL.md`)
+- `nova-feature-spec`(기능명세서: API명세+검증흐름도+체크리스트), `nova-architecture`(BigPicture+시퀀스+Entity+테스트+권한), `nova-db-erd`(Mermaid ERD+테이블사전), `nova-api-flow`(엔드포인트 처리 플로우+에러분기), `nova-domain-insight`(도메인 규칙/용어/엣지/결정로그 — "다음 작업용 컨텍스트"), `nova-prompt-vault`(개인 프롬프트 금고: 저장/분류/검색/재사용 — #3).
+- 전역 원칙(기능명세서·아키텍처 포맷, 예외 4계층, 계층 아키텍처) 반영. 출력은 `docs/<category>/*.md` → REPO_ROOT 안이라 자산 sync 대상.
+
+**#2 백엔드 번들 서빙 + install.sh 단계** ✅
+- `routers/scripts.py`: `GET /api/scripts/skills.tar` — `server/scripts/skills/`를 tar로 스트리밍(인증 불필요, 공개 정적). io/tarfile 사용.
+- install.sh `_build_integrated_script`: 5단계 → **6단계**. 신규 `[4/6] skill 설치`(skills.tar 다운로드 → `.claude/skills/`에 `tar -xf`), 완료 안내에 6개 슬래시 명령 표시.
+
+### 검증
+
+- TestClient: skills.tar 200(30,720B, 6 SKILL.md, `nova-*/SKILL.md` 구조), 6 skill name 파싱 OK.
+- install.sh 생성물: `[4/6]`·skills.tar 다운로드·`.claude/skills` 추출·`[6/6]`·완료안내 포함, 잔존 `[n/5]` 없음.
+- 라이브: 백엔드 재기동 후 `curl skills.tar | tar -xf` → `.claude/skills/nova-*/SKILL.md` 6종 정확히 추출.
+
+### 다음 세션에 할 작업
+
+- **되먹임 루프 완성(RAG)**: 생성된 docs/*.md → pgvector 색인 → AI 다음 작업에 자동 주입(#2 방향, 이번엔 미착수). "지식 문서 = AI 작업 메모리"의 핵심 루프.
+- 더 많은 유용한 skill 번들에 추가(코드리뷰/테스트/리팩토링 등).
+- 앞서 미룬 Tier 4(보안 하드닝)·Tier 5(로깅/에러코드).
+- 결제 실연동(맨 마지막).
+
+### 주의사항
+
+- skill 번들은 **공개 엔드포인트**(인증 불필요) — 민감정보 없음(skill 정의는 공개 가능). install.sh 본문엔 API_KEY가 변수로 박힘(기존 보안 모델 동일).
+- skill 출력 디렉토리 `docs/`는 자산 push의 SKIP 목록(.aiops/node_modules 등)에 없음 → 정상 sync. `.aiops/`에 쓰면 sync 안 되니 docs/ 유지.
+- 백엔드 재시작해야 새 라우트 반영(--reload 미사용). 프론트 vite는 자동.
+
+### 관련 파일
+
+**신규**: `server/scripts/skills/{nova-feature-spec,nova-architecture,nova-db-erd,nova-api-flow,nova-domain-insight,nova-prompt-vault}/SKILL.md`
+**변경**: `server/routers/scripts.py`(skills.tar 엔드포인트 + install.sh 6단계)
+
+---
+
 ## 2026.05.29 16:30 — 제품 피벗: 랜딩/퍼널 + 프리미엄(프롬프트 라이브러리) + 코칭 중심 IA
 
 ### 한 줄 요약

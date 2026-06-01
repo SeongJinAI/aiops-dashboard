@@ -116,17 +116,17 @@ def _parse_templates(text: str) -> list[dict]:
 
 async def distill(tenant_id: str, provider_name: str = "anthropic") -> dict:
     """기여 corpus → LLM 증류 → 글로벌 템플릿 교체. BYOK 키 필요."""
-    from services.llm.registry import get_provider
+    from services import managed_llm
 
     corpus = await collect_corpus(extra_tenant_id=tenant_id)
     if len(corpus) < 5:
         return {"count": 0, "corpus": len(corpus),
                 "message": "증류할 프롬프트가 부족합니다. 공유 풀 기여(opt-in)를 켜고 활동이 쌓이면 다시 시도하세요."}
 
-    provider = get_provider(provider_name, tenant_id=tenant_id)
     numbered = "\n".join(f"{i+1}. {p}" for i, p in enumerate(corpus))
     prompt = f"다음은 {len(corpus)}개의 익명 프롬프트입니다.\n\n{numbered}"
-    text = await provider.complete(prompt, system=_SYSTEM, max_tokens=4000)
+    text = await managed_llm.complete(
+        tenant_id, prompt, system=_SYSTEM, max_tokens=4000, provider_pref=provider_name)
     templates = _parse_templates(text)
     if not templates:
         return {"count": 0, "corpus": len(corpus), "message": "템플릿 생성에 실패했습니다(LLM 응답 파싱 불가). 다시 시도하세요."}

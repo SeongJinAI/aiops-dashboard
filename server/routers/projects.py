@@ -100,6 +100,7 @@ async def register_by_apikey(
     try:
         from main import restart_watcher
         restart_watcher()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("nova").warning("watcher 재시작 실패: %s", e)
     return result

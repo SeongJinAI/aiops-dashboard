@@ -9,7 +9,9 @@ from pydantic import BaseModel
 
 from middleware.auth import get_current_user
 from services import coach as coach_svc
+from services.errors import E, err
 from services.llm.base import LLMNotConfigured
+from services.usage import QuotaExceeded
 from services.rate_limit import limiter
 
 router = APIRouter()
@@ -36,7 +38,9 @@ async def coach_summary(
         return await coach_svc.synthesize(user["tenant_id"], provider)
     except LLMNotConfigured as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except QuotaExceeded as e:
+        raise err(E.QUOTA_EXCEEDED, str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:  # provider/네트워크 오류 — 사용자에게 사유 전달
-        raise HTTPException(status_code=502, detail=f"코치 브리핑 생성 실패: {e}")
+    except Exception as e:  # LLM 제공자/네트워크 오류 — 외부 의존 일시 장애(재시도 가능)
+        raise err(E.LLM_PROVIDER, f"LLM 제공자 호출에 실패했습니다 (재시도 가능): {e}")

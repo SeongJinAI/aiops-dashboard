@@ -13,7 +13,7 @@ interface Billing { premium: boolean; share_opt_in: boolean; }
 const DEFAULT_LIB: LibData = { templates: [], topics: [], count: 0 };
 
 export function Library({ onNavigate }: { onNavigate?: (p: string) => void }) {
-  const { data: billing } = useApi<Billing>('/billing/status', { premium: false, share_opt_in: false });
+  const { data: billing, loading: billingLoading } = useApi<Billing>('/billing/status', { premium: false, share_opt_in: false });
   const { data: lib, refetch } = useApi<LibData>('/library/templates', DEFAULT_LIB);
   const { pushToast } = useToast();
   const [topic, setTopic] = useState<string>('전체');
@@ -36,6 +36,21 @@ export function Library({ onNavigate }: { onNavigate?: (p: string) => void }) {
       pushToast({ tone: 'danger', title: '증류 실패', desc: e instanceof Error ? e.message : '' });
     } finally { setDistilling(false); }
   };
+
+  // ── 구독 상태 로딩 중: 잠금 화면 깜박임 방지 ──────────────────────
+  if (billingLoading) {
+    return (
+      <>
+        <div className="page-head">
+          <div>
+            <h1 className="page-title"><Icon name="message-square" size={18} />프롬프트 라이브러리 <Chip tone="accent">Pro</Chip></h1>
+            <div className="page-sub">구독 상태 확인 중…</div>
+          </div>
+        </div>
+        <div className="empty-inline">불러오는 중…</div>
+      </>
+    );
+  }
 
   // ── 비프리미엄: 잠금 + 업그레이드 ────────────────────────────────
   if (!billing.premium) {

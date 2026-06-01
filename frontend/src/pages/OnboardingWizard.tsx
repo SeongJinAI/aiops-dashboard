@@ -215,7 +215,7 @@ export function OnboardingWizard({
                     alignItems: 'center',
                     justifyContent: 'center',
                     background: done ? C.green : current ? C.accent : C.surfaceAlt,
-                    color: done || current ? '#fff' : C.dim,
+                    color: done || current ? 'var(--text-on-accent)' : C.dim,
                     fontSize: 12,
                     fontWeight: 600,
                   }}
@@ -277,7 +277,7 @@ export function OnboardingWizard({
                   </p>
                   <div
                     style={{
-                      background: '#fffbeb',
+                      background: 'var(--warning-soft)',
                       border: `1px solid ${C.orange}`,
                       borderRadius: 8,
                       padding: 14,
@@ -296,7 +296,7 @@ export function OnboardingWizard({
                     disabled={regenerating || !onRegenerate}
                     style={{
                       background: C.accent,
-                      color: '#fff',
+                      color: 'var(--text-on-accent)',
                       border: 'none',
                       borderRadius: 6,
                       padding: '10px 18px',
@@ -407,7 +407,7 @@ export function OnboardingWizard({
               {detected ? (
                 <div
                   style={{
-                    background: '#f0fdf4',
+                    background: 'var(--success-soft)',
                     border: `1px solid ${C.green}`,
                     borderRadius: 8,
                     padding: 20,
@@ -457,7 +457,7 @@ export function OnboardingWizard({
                     <div
                       style={{
                         marginTop: 16,
-                        background: '#fff5f5',
+                        background: 'var(--danger-soft)',
                         border: `1px solid ${C.red}`,
                         borderRadius: 8,
                         padding: 14,
@@ -515,7 +515,7 @@ export function OnboardingWizard({
             disabled={!canGoNext()}
             style={{
               background: canGoNext() ? C.accent : C.surfaceAlt,
-              color: canGoNext() ? '#fff' : C.dim,
+              color: canGoNext() ? 'var(--text-on-accent)' : C.dim,
               border: 'none',
               borderRadius: 6,
               padding: '8px 18px',

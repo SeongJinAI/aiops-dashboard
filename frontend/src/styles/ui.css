@@ -1165,8 +1165,8 @@
   font-size: 10px; font-weight: 600; flex-shrink: 0;
   background: var(--surface-alt); color: var(--text-dim);
 }
-.stepnum.done { background: var(--success); color: #fff; }
-.stepnum.active { background: var(--accent); color: #fff; }
+.stepnum.done { background: var(--success); color: var(--text-on-accent); }
+.stepnum.active { background: var(--accent); color: var(--text-on-accent); }
 .steprow-label { flex: 1; font-size: 12px; }
 .steprow-time { font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); }
 
@@ -1284,7 +1284,7 @@
 .switch-track { display: block; width: 38px; height: 22px; border-radius: 9999px; background: var(--surface-alt); border: 1px solid var(--border); transition: background .15s ease; position: relative; }
 .switch-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-faint); transition: transform .15s ease, background .15s ease; }
 .switch input:checked + .switch-track { background: var(--accent); border-color: var(--accent); }
-.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); background: #fff; }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); background: var(--text-on-accent); }
 
 /* ----- Prompt Library ----- */
 .lib-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s-lg); }
@@ -1301,3 +1301,15 @@
 .lib-card-body { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 1.55; margin-top: 8px; white-space: pre-wrap; max-height: 132px; overflow: hidden; flex: 1; }
 .lib-card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
 .lib-tag { font-size: 10px; color: var(--text-faint); background: var(--surface-alt); padding: 1px 7px; border-radius: 9999px; }
+
+/* ----- 지식 챗 (RAG) ----- */
+.chat-ask { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input { flex: 1; resize: vertical; min-height: 64px; height: auto; padding: 8px 10px; font-family: var(--font-sans); line-height: 1.5; }
+.chat-sources { margin-top: var(--s-lg); border-top: 1px solid var(--divider); padding-top: var(--s-md); }
+.chat-sources-h { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.chat-src { border: 1px solid var(--border); border-radius: var(--r-md); padding: 9px 12px; margin-bottom: 8px; background: var(--surface); }
+.chat-src-head { display: flex; gap: 8px; align-items: baseline; }
+.chat-src-no { color: var(--accent); font-weight: 700; font-family: var(--font-mono); font-size: 11px; }
+.chat-src-path { color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.chat-src-score { color: var(--text-faint); font-size: 10.5px; }
+.chat-src-snip { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 5px; }

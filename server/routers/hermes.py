@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, func, select, update as _update
 
 from middleware.auth import get_current_user
+from services.errors import E, err
 from models.db_models import HermesWiki, HermesWikiRun, Project
 from services.database import session_scope
 from services.db import list_assets
@@ -76,12 +77,9 @@ async def hermes_catalog(user: dict = Depends(get_current_user)):
     tenant_id = user["tenant_id"]
     project_name, repo_path = await _get_active_project_path(tenant_id)
     if not project_name:
-        raise HTTPException(
-            status_code=400,
-            detail="활성 프로젝트가 없습니다. 사용자 머신에서 install.sh를 실행하면 자동 등록됩니다.",
-        )
+        raise err(E.NO_ACTIVE_PROJECT)
     if AIOPS_MODE == "local" and not repo_path:
-        raise HTTPException(status_code=400, detail="로컬 모드: repoPath가 비어있습니다.")
+        raise err(E.LOCAL_NO_REPO_PATH)
 
     assets = await _load_assets(tenant_id, project_name, repo_path)
     return {
@@ -315,9 +313,9 @@ async def hermes_wiki_update(
     tenant_id = user["tenant_id"]
     project_name, repo_path = await _get_active_project_path(tenant_id)
     if not project_name:
-        raise HTTPException(status_code=400, detail="활성 프로젝트가 없습니다.")
+        raise err(E.NO_ACTIVE_PROJECT)
     if AIOPS_MODE == "local" and not repo_path:
-        raise HTTPException(status_code=400, detail="로컬 모드: repoPath가 비어있습니다.")
+        raise err(E.LOCAL_NO_REPO_PATH)
 
     provider = (req.provider if req else None) or None
     if provider and provider not in PROVIDER_NAMES:
@@ -336,7 +334,7 @@ async def hermes_wiki_update(
             )
         )).first()
         if running:
-            raise HTTPException(status_code=409, detail="이미 진행 중인 업데이트가 있습니다.")
+            raise err(E.RUN_IN_PROGRESS)
         new_run = HermesWikiRun(
             tenant_id=tenant_id, project_name=project_name, status="running",
         )
@@ -374,7 +372,7 @@ async def hermes_run_get(run_id: int, user: dict = Depends(get_current_user)):
             )
         )).scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="run not found")
+        raise err(E.NOT_FOUND_RUN)
     return _run_to_dict(run)
 
 
@@ -389,7 +387,7 @@ async def hermes_wiki_versions(
     최신 버전이 먼저.
     """
     if perspective not in ("planner", "developer", "user"):
-        raise HTTPException(status_code=400, detail="perspective는 planner/developer/user 중 하나")
+        raise err(E.INVALID_PERSPECTIVE)
 
     tenant_id = user["tenant_id"]
     project_name, _ = await _get_active_project_path(tenant_id)
@@ -429,11 +427,11 @@ async def hermes_wiki_version_get(
 ):
     """활성 프로젝트의 특정 버전 본문."""
     if perspective not in ("planner", "developer", "user"):
-        raise HTTPException(status_code=400, detail="perspective는 planner/developer/user 중 하나")
+        raise err(E.INVALID_PERSPECTIVE)
     tenant_id = user["tenant_id"]
     project_name, _ = await _get_active_project_path(tenant_id)
     if not project_name:
-        raise HTTPException(status_code=404, detail="활성 프로젝트가 없습니다")
+        raise err(E.NO_ACTIVE_PROJECT)
 
     async with session_scope() as s:
         row = (await s.execute(
@@ -446,7 +444,7 @@ async def hermes_wiki_version_get(
             )
         )).first()
     if not row:
-        raise HTTPException(status_code=404, detail="해당 버전을 찾을 수 없습니다")
+        raise err(E.NOT_FOUND_WIKI_VERSION)
     return {
         "perspective": perspective,
         "version": row.version,

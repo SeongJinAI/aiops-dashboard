@@ -283,17 +283,16 @@ def _build_summary_prompt(report: dict) -> tuple[str, str]:
 
 
 async def synthesize(tenant_id: str, provider_name: str = "anthropic") -> dict:
-    """등록된 BYOK provider로 코치 브리핑을 생성한다. 키 없으면 LLMNotConfigured."""
-    from services.llm.registry import get_provider
+    """코치 브리핑 생성. 관리형 AI(쿼터) 우선, BYOK 있으면 그것으로. 키/쿼터 없으면 예외."""
+    from services import managed_llm
 
     report = await generate_report(tenant_id)
     system, prompt = _build_summary_prompt(report)
-    provider = get_provider(provider_name, tenant_id=tenant_id)
-    text = await provider.complete(prompt, system=system, max_tokens=1200)
+    text = await managed_llm.complete(
+        tenant_id, prompt, system=system, max_tokens=1200, provider_pref=provider_name)
     return {
         "summary": text.strip(),
-        "provider": provider.name,
-        "model": provider.default_model,
+        "provider": managed_llm.MANAGED_PROVIDER,
         "score": report["score"],
         "generatedAt": report["generatedAt"],
     }

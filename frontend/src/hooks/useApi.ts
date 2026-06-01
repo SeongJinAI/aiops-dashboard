@@ -32,8 +32,8 @@ export function useApi<T>(endpoint: string, defaultValue: T) {
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
+      const json = await res.json().catch(() => null);
+      if (json !== null) setData(json);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');

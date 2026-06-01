@@ -1,10 +1,21 @@
 import asyncio
+import logging
 import sys
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv
+
+# 구조화 로깅 — 로깅 레벨 컨벤션: 4xx=warning, 5xx=error (중앙 핸들러에서 처리)
+logging.basicConfig(
+    level=os.getenv("AIOPS_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("nova")
 
 # 프로젝트 루트의 .env 로드
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
@@ -20,7 +31,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from services.rate_limit import limiter
 
-from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts, hermes, secrets as secrets_router, assets as assets_router, coach, billing, library
+from routers import logs, projects, health, repos, ingest, auth, claude_config, scripts, hermes, secrets as secrets_router, assets as assets_router, coach, billing, library, chat
 from services.log_reader import get_log_dir, watch_log_files
 from services.log_store import AIOPS_MODE
 
@@ -77,6 +88,22 @@ app = FastAPI(title="AI OPS Dashboard", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+# 중앙 에러 로깅 — 4xx는 warning(클라이언트 원인), 5xx는 error(서버 원인).
+@app.exception_handler(StarletteHTTPException)
+async def _log_http_exception(request, exc: StarletteHTTPException):
+    if exc.status_code >= 500:
+        log.error("%s %s %s → %s", exc.status_code, request.method, request.url.path, exc.detail)
+    elif exc.status_code >= 400:
+        log.warning("%s %s %s → %s", exc.status_code, request.method, request.url.path, exc.detail)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def _log_unhandled_exception(request, exc: Exception):
+    log.exception("500 %s %s (미처리 예외)", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "내부 서버 오류가 발생했습니다."})
+
 # CORS: 환경변수로 origins 설정 가능
 _cors_origins = os.getenv("AIOPS_CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")
 app.add_middleware(
@@ -100,6 +127,7 @@ app.include_router(assets_router.router, prefix="/api/assets")
 app.include_router(coach.router, prefix="/api/coach")
 app.include_router(billing.router, prefix="/api/billing")
 app.include_router(library.router, prefix="/api/library")
+app.include_router(chat.router, prefix="/api/chat")
 
 
 @app.websocket("/ws/logs")

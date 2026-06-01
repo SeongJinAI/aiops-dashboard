@@ -299,7 +299,7 @@ strong{font-weight:700;color:var(--text);}
     <div class="chain mt-xl">
       <div class="node t1"><div class="bar"></div><div class="k">01 · Track</div><h3>수집</h3><p>프롬프트·Hook·세션·설정을 자동으로 모은다</p></div>
       <div class="arrow">→</div>
-      <div class="node t2"><div class="bar"></div><div class="k">02 · Wikify</div><h3>자산화</h3><p>흩어진 .md를 3관점 위키로 자동 빌드</p></div>
+      <div class="node t2"><div class="bar"></div><div class="k">02 · Wikify</div><h3>자산화</h3><p>문서를 자동 생성·색인하고 다음 작업에 되먹임</p></div>
       <div class="arrow">→</div>
       <div class="node t3"><div class="bar"></div><div class="k">03 · Coach</div><h3>코칭</h3><p>축적 데이터로 다음 한 걸음을 제안</p></div>
     </div>
@@ -339,38 +339,41 @@ strong{font-weight:700;color:var(--text);}
 
   <!-- 11 · WIKIFY -->
   <section class="slide">
-    <div class="eyebrow">02 · Wikify — 자산화</div>
-    <h2>같은 설명을 두 번 하지 않으려면,<br/><span class="accent">컨텍스트를 자산으로</span> 바꿔야 합니다.</h2>
-    <p class="lead mt-m maxw">흩어진 <span class="mono">.md</span> 문서를 <strong>에이전트</strong>가 3관점 위키로 자동 빌드합니다.
-    실제 한 ERP 프로젝트의 <strong class="mono">252개</strong> 문서가 기획자·개발자·사용자 관점으로 재구성됐습니다.</p>
-    <div class="cols mt-xl">
-      <div class="card"><div class="ic" style="color:var(--purple)">◆</div><h3>기획자 관점</h3><p>왜 만들었는가 · 56개 문서</p></div>
-      <div class="card"><div class="ic" style="color:var(--accent)">◆</div><h3>개발자 관점</h3><p>어떻게 동작하는가 · 147개 문서</p></div>
-      <div class="card"><div class="ic" style="color:var(--cyan)">◆</div><h3>사용자 관점</h3><p>어떻게 쓰는가 · 49개 문서</p></div>
+    <div class="eyebrow">02 · Wikify — 자산화 & 되먹임</div>
+    <h2>AI가 만든 지식을,<br/><span class="accent">AI가 다시 읽습니다.</span></h2>
+    <p class="lead mt-m maxw">설치 한 줄이 프로젝트에 <strong>문서 생성 skill 7종</strong>을 깝니다. 작업하며 기능명세·아키텍처·ERD·API 플로우·도메인 인사이트를 <span class="mono">docs/</span>로 만들면 → Nova가 색인 → <strong>다음 작업 때 그 문서를 자동으로 되먹입니다.</strong></p>
+    <div class="loop mt-xl">
+      <div class="node"><div class="k">skill</div><h3>문서 생성</h3></div>
+      <div class="a">→</div>
+      <div class="node"><div class="k">Nova</div><h3>색인·자산화</h3></div>
+      <div class="a">→</div>
+      <div class="node"><div class="k">RAG</div><h3>다음 작업에 주입</h3></div>
+      <div class="a">↺</div>
+      <div class="node"><div class="k">AI</div><h3>더 나은 결과</h3></div>
     </div>
   </section>
 
-  <!-- 12 · WIKIFY visual -->
+  <!-- 12 · WIKIFY visual — 지식 챗(RAG) -->
   <section class="slide">
-    <div class="eyebrow">02 · Wikify — 동작</div>
-    <h2>버튼 하나, 버전까지.</h2>
-    <div class="maxw mt-l" style="width:100%;max-width:880px;">
+    <div class="eyebrow">02 · Wikify — 지식 챗 (RAG)</div>
+    <h2>프로젝트에게 <span class="grad">물어봅니다.</span></h2>
+    <div class="mt-l" style="width:100%;max-width:900px;">
       <div class="app-frame">
-        <div class="app-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="app-url">nova.local / agent</span></div>
+        <div class="app-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="app-url">nova / chat</span></div>
         <div class="app-body">
-          <div class="app-head"><div><div class="app-title">✦ 에이전트 — 위키 자동 생성</div><div class="app-sub">catalog → planner → developer → user</div></div><div class="chip accent"><span class="dot"></span>building…</div></div>
+          <div class="box"><div style="font-size:14px;font-weight:600;">Q. 로그인 인증 흐름이 어떻게 되나요?</div></div>
           <div class="box">
-            <div class="box-h"><span>빌드 진행</span><span class="mono dim">75%</span></div>
-            <div class="progress"><i></i></div>
-            <div class="stagerow"><span>✓ catalog</span><span>✓ planner</span><span>● developer</span><span class="faint">user</span></div>
-          </div>
-          <div class="box">
-            <div class="ptabs"><span class="ptab on">기획자</span><span class="ptab">개발자</span><span class="ptab">사용자</span><span style="flex:1"></span><span class="ptab">v3 · diff</span></div>
-            <div class="wikiline h"></div><div class="wikiline w1"></div><div class="wikiline w2"></div><div class="wikiline w3"></div>
+            <div style="font-size:13px;color:var(--text-dim);line-height:1.65;">사용자 인증은 JWT 기반입니다. <code>/auth/login</code>에서 이메일·비밀번호를 검증하고 토큰을 발급하며 <strong style="color:var(--accent)">[1]</strong>, 실패 시 401 <code>ERR_UNAUTHORIZED</code>를 반환합니다 <strong style="color:var(--accent)">[2]</strong>.</div>
+            <div style="margin-top:13px;border-top:1px dashed var(--divider);padding-top:11px;">
+              <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;">출처 2 · 내 문서에서</div>
+              <div class="mono" style="font-size:12px;color:var(--text-dim);margin-top:7px;"><span style="color:var(--accent);font-weight:700;">[1]</span> docs/specs/login.md · 검증 흐름</div>
+              <div class="mono" style="font-size:12px;color:var(--text-dim);margin-top:3px;"><span style="color:var(--accent);font-weight:700;">[2]</span> docs/architecture/auth.md · 에러 분기</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
+    <p class="lead mt-m faint">검색은 키 없이도 동작(어휘) · 답변 합성만 내 LLM 키(BYOK). 추측이 아니라 <strong>내 문서가 근거</strong>입니다.</p>
   </section>
 
   <!-- 13 · COACH setup -->
@@ -417,7 +420,7 @@ strong{font-weight:700;color:var(--text);}
     <div class="demo-pulse"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"/></svg></div>
     <div class="eyebrow">잠깐, 슬라이드를 멈추고</div>
     <h2>실제로 <span class="accent">보여드리겠습니다.</span></h2>
-    <p class="lead mt-l">Track → Wikify → Coach, 실제 제 데이터로.</p>
+    <p class="lead mt-l">Track → Wikify → Coach, 그리고 지식 챗까지 — 실제 제 데이터로.</p>
   </section>
 
   <!-- 16 · HOW (build in public) -->
@@ -429,8 +432,8 @@ strong{font-weight:700;color:var(--text);}
       <span class="s">FastAPI</span><span class="s">React 19</span><span class="s">TypeScript</span><span class="s">SQLAlchemy · PostgreSQL</span><span class="s">WebSocket 실시간</span><span class="s">BYOK · Anthropic/OpenAI/Gemini</span><span class="s">Docker · nginx</span>
     </div>
     <div class="cols mt-xl">
-      <div class="card"><h3 class="accent">✓ 지금 되는 것</h3><p>Track 전체 · Wikify(위키 자동 생성·버전·diff) · <strong>Coach(방금 추가)</strong> · BYOK 멀티 프로바이더</p></div>
-      <div class="card"><h3 class="dim">◷ 만드는 중</h3><p>RAG 챗봇(pgvector) · 결제 티어 · 에이전트 어그노스틱(Cursor·Antigravity)</p></div>
+      <div class="card"><h3 class="accent">✓ 지금 되는 것</h3><p>Track 수집 · <strong>지식 문서 생성 skill 7종 + RAG 지식 챗</strong> · Coach 점수·인사이트 · 프롬프트 라이브러리(Pro) · 랜딩→가입→구독 · BYOK 멀티 프로바이더</p></div>
+      <div class="card"><h3 class="dim">◷ 만드는 중</h3><p>임베딩 벡터 검색(pgvector) · 결제 실연동(Lemon Squeezy) · 에이전트 어그노스틱(Cursor·Antigravity)</p></div>
       <div class="card"><h3 class="dim">◎ 초대</h3><p>완성품을 자랑하러 온 게 아닙니다. 함께 뜯어보고 만들 <strong>과정</strong>을 가져왔습니다.</p></div>
     </div>
   </section>

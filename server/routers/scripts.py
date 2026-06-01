@@ -2,16 +2,33 @@
 설치 스크립트 서빙 — 사용자가 본인 레포에서 curl로 받아 실행할 수 있게 정적 텍스트 응답
 + 통합 install.sh — API 키만 있으면 .env 패치 + 레포 등록 + Hook 설치 + 연결 테스트까지 1줄로
 """
+import io
 import os
+import tarfile
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from services.auth import verify_api_key, verify_api_key_db
 from routers.health import resolve_public_url
 
 router = APIRouter()
 
 SCRIPTS_DIR = Path(os.path.dirname(os.path.dirname(__file__))) / "scripts"
+SKILLS_DIR = SCRIPTS_DIR / "skills"
+
+
+@router.get("/skills.tar")
+async def skills_bundle():
+    """프로젝트에 설치할 지식 문서 생성 skill 번들 (tar).
+    install.sh가 .claude/skills/ 로 풀어 넣는다. 인증 불필요(공개 정적 자산)."""
+    if not SKILLS_DIR.is_dir():
+        raise HTTPException(status_code=404, detail="스킬 번들을 찾을 수 없습니다")
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        for p in sorted(SKILLS_DIR.rglob("*")):
+            if p.is_file():
+                tar.add(str(p), arcname=str(p.relative_to(SKILLS_DIR)))
+    return Response(content=buf.getvalue(), media_type="application/x-tar")
 
 
 @router.get("/install-hook.sh", response_class=PlainTextResponse)
@@ -74,8 +91,9 @@ async def integrated_installer(
       1) ~/.claude/.env 에 AIOPS_REMOTE_URL/AIOPS_API_KEY/AIOPS_TENANT_ID 추가 (idempotent)
       2) 현재 디렉토리(또는 git toplevel)를 활성 프로젝트로 자동 등록
       3) .claude/hooks/ + .aiops/ 디렉토리 생성, Hook 스크립트 3종 다운로드, settings.json 패치
-      4) 프로젝트 .md 자산 초기 push (Hermes 위키/RAG 입력)
-      5) 테스트 ping 전송으로 연결 확인
+      4) 지식 문서 생성 skill 번들 설치 (.claude/skills/) — 개발자가 문서를 만들면 자산 sync로 되먹임
+      5) 프로젝트 .md 자산 초기 push (Hermes 위키/RAG 입력)
+      6) 테스트 ping 전송으로 연결 확인
     """
     if not token:
         raise HTTPException(status_code=400, detail="token 파라미터가 필요합니다")
@@ -120,7 +138,7 @@ echo "    tenant  : $TENANT_ID"
 echo ""
 
 # 1) ~/.claude/.env 패치 (idempotent)
-echo "[1/5] ~/.claude/.env 환경변수 설정"
+echo "[1/6] ~/.claude/.env 환경변수 설정"
 mkdir -p ~/.claude
 ENV_FILE="$HOME/.claude/.env"
 touch "$ENV_FILE"
@@ -145,7 +163,7 @@ set_env_var "AIOPS_TENANT_ID"  "$TENANT_ID"
 echo "    완료"
 
 # 2) 레포를 백엔드에 자동 등록 (활성 프로젝트로 설정됨)
-echo "[2/5] 레포 자동 등록 → $REPO_NAME"
+echo "[2/6] 레포 자동 등록 → $REPO_NAME"
 REG_BODY=$(cat <<JSON
 {{"name": "$REPO_NAME", "repoPath": "$REPO_ROOT", "gitUrl": ""}}
 JSON
@@ -164,7 +182,7 @@ else
 fi
 
 # 3) Claude Code Hook 설치
-echo "[3/5] Claude Code Hook 설치"
+echo "[3/6] Claude Code Hook 설치"
 cd "$REPO_ROOT"
 mkdir -p .claude/hooks \\
     .aiops/hooks .aiops/prompts \\
@@ -215,9 +233,21 @@ with open(path, "w") as f:
 PYEOF
 echo "    완료 (settings.json 갱신)"
 
-# 4) 초기 .md 자산 push — Hermes 위키 빌더와 RAG 입력이 된다.
+# 4) 지식 문서 생성 skill 설치 → .claude/skills/
+#    개발자가 이 skill로 만든 docs/*.md 는 자산 sync로 Nova에 되먹임된다.
+echo "[4/6] 지식 문서 생성 skill 설치"
+mkdir -p .claude/skills
+if curl -fsSL "$API_BASE/api/scripts/skills.tar" -o /tmp/nova-skills.tar; then
+    tar -xf /tmp/nova-skills.tar -C .claude/skills
+    rm -f /tmp/nova-skills.tar
+    echo "    완료 — /nova-feature-spec /nova-architecture /nova-db-erd /nova-api-flow /nova-domain-insight /nova-prompt-vault /nova-recall"
+else
+    echo "    경고: skill 번들 다운로드 실패 — 건너뜀"
+fi
+
+# 5) 초기 .md 자산 push — Hermes 위키 빌더와 RAG 입력이 된다.
 #    이후 변경분은 PostToolUse Hook이 자동 sync.
-echo "[4/5] 프로젝트 .md 자산 push"
+echo "[5/6] 프로젝트 .md 자산 push"
 REPO_ROOT="$REPO_ROOT" API_BASE="$API_BASE" API_KEY="$API_KEY" PROJECT_NAME="$REPO_NAME" \
 python3 - <<'PYEOF'
 import json, os, urllib.request, urllib.error
@@ -275,8 +305,8 @@ for i in range(0, total, BATCH):
 print("    " + str(sent) + "/" + str(total) + " .md 자산 push 완료")
 PYEOF
 
-# 5) 연결 테스트 ping
-echo "[5/5] 연결 테스트 ping 전송"
+# 6) 연결 테스트 ping
+echo "[6/6] 연결 테스트 ping 전송"
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 PING_BODY=$(cat <<JSON
 {{"category":"hooks","payload":{{"ts":"$TS","hook":"install_test","script":"install.sh","exit":0,"ms":0,"repo":"$REPO_NAME"}}}}
@@ -296,4 +326,11 @@ fi
 echo ""
 echo "✅ 설치 완료. 이제 이 레포에서 Claude Code 작업이 자동으로 대시보드에 수집됩니다."
 echo "   대시보드: $API_BASE"
+echo ""
+echo "📚 지식 문서 생성 skill이 설치되었습니다. Claude Code에서 사용하세요:"
+echo "   /nova-feature-spec   기능명세서      /nova-architecture   아키텍처 설명서"
+echo "   /nova-db-erd         DB 관계도(ERD)  /nova-api-flow       API 플로우"
+echo "   /nova-domain-insight 도메인 인사이트  /nova-prompt-vault   프롬프트 금고"
+echo "   /nova-recall         작업 전 지식 회상 (지식 베이스 검색 → 컨텍스트)"
+echo "   → 생성된 docs/*.md 는 자동으로 대시보드에 수집되고, /nova-recall 로 다음 작업에 되먹임됩니다."
 """

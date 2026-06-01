@@ -7,11 +7,14 @@ import { Box, Btn, Chip } from '../ui/primitives';
 
 interface Plan { id: string; name: string; price: number; features: string[]; }
 interface Billing { plan: string; premium: boolean; share_opt_in: boolean; plans: Plan[]; }
+interface Usage { period: string; used: number; quota: number; remaining: number; }
 
 const DEFAULT: Billing = { plan: 'free', premium: false, share_opt_in: false, plans: [] };
+const DEFAULT_USAGE: Usage = { period: '', used: 0, quota: 0, remaining: 0 };
 
 export function Subscribe() {
   const { data: billing, refetch } = useApi<Billing>('/billing/status', DEFAULT);
+  const { data: usage } = useApi<Usage>('/billing/usage', DEFAULT_USAGE);
   const { pushToast } = useToast();
 
   const upgrade = async (plan: string) => {
@@ -70,6 +73,24 @@ export function Subscribe() {
           );
         })}
       </div>
+
+      <Box title="이번 달 관리형 AI 사용량">
+        <div className="distrow">
+          <div className="distrow-head">
+            <span>{usage.period || '—'} · 코치 브리핑 · 지식 챗 · 라이브러리</span>
+            <span className="muted mono">{usage.used} / {usage.quota}회</span>
+          </div>
+          <div className="meter">
+            <div className={`meter-fill ${usage.remaining === 0 ? 'danger' : usage.remaining <= Math.max(1, usage.quota * 0.2) ? 'warning' : ''}`}
+                 style={{ width: `${usage.quota > 0 ? Math.min(100, (usage.used / usage.quota) * 100) : 0}%` }} />
+          </div>
+          <div className="distrow-desc">
+            {usage.remaining > 0
+              ? `남은 ${usage.remaining}회 — 키 없이 바로 사용. 한도 초과 시 Pro 업그레이드 또는 본인 LLM 키(BYOK) 등록.`
+              : '이번 달 한도를 모두 사용했습니다. Pro로 업그레이드하거나 연결 설정에서 본인 LLM 키를 등록하세요.'}
+          </div>
+        </div>
+      </Box>
 
       <Box title="공유 풀 기여 (옵트인)" className="">
         <div className="share-row">

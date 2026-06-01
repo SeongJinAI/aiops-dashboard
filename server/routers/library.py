@@ -11,7 +11,9 @@ from pydantic import BaseModel
 
 from middleware.auth import require_premium
 from services import prompt_library
+from services.errors import E, err
 from services.llm.base import LLMNotConfigured
+from services.usage import QuotaExceeded
 from services.rate_limit import limiter
 
 router = APIRouter()
@@ -37,7 +39,9 @@ async def distill(request: Request, body: DistillRequest | None = None,
         return await prompt_library.distill(user["tenant_id"], provider)
     except LLMNotConfigured as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except QuotaExceeded as e:
+        raise err(E.QUOTA_EXCEEDED, str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"라이브러리 증류 실패: {e}")
+    except Exception as e:  # LLM 제공자/네트워크 오류 — 외부 의존 일시 장애(재시도 가능)
+        raise err(E.LLM_PROVIDER, f"LLM 제공자 호출에 실패했습니다 (재시도 가능): {e}")

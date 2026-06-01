@@ -93,8 +93,7 @@ async def provider_register(
     if not req.skip_verification:
         ok, msg = await verify_provider_key(kind, plain)
         if not ok:
-            import sys
-            print(f"[{kind}-verify] {msg}", file=sys.stderr)
+            # 400(요청검증) — 중앙 예외 핸들러가 warning으로 로깅한다.
             raise HTTPException(status_code=400, detail=msg)
         verified = True
         message = msg

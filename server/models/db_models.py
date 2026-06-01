@@ -179,6 +179,34 @@ class Subscription(Base):
     )
 
 
+class LLMUsage(Base):
+    """관리형 LLM 호출 사용량 — 테넌트·기간(YYYY-MM)별 요청 수. plan 쿼터 미터링용.
+    BYOK(본인 키) 호출은 집계하지 않는다(관리형=Nova 비용 부담분만)."""
+    __tablename__ = "llm_usage"
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    period: Mapped[str] = mapped_column(String, primary_key=True)  # "YYYY-MM"
+    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class DocChunk(Base):
+    """지식 문서(assets) 청크 — RAG 검색 단위. assets에서 재색인으로 생성.
+    임베딩 없이 어휘 검색이 기본(키 불필요). 추후 embedding 컬럼 추가로 벡터 검색 확장."""
+    __tablename__ = "doc_chunks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_name: Mapped[str] = mapped_column(String, nullable=False)
+    path: Mapped[str] = mapped_column(String, nullable=False)
+    heading: Mapped[str | None] = mapped_column(String, nullable=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        Index("idx_doc_chunks_lookup", "tenant_id", "project_name"),
+    )
+
+
 class PromptTemplate(Base):
     """LLM이 기여 프롬프트(opt-in)를 증류해 만든 주제별 공유 템플릿 (커뮤니티 라이브러리).
     개인 원본 프롬프트는 저장하지 않는다 — 익명·일반화된 템플릿만."""
