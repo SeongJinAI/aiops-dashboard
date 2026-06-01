@@ -1,5 +1,12 @@
 # HANDOFF.md
 
+> 📦 **머신/세션 전환 메모 (2026.06.01):** 다른 PC → 개인 노트북으로 작업환경 이전 중. 이 세션은 폐기 예정.
+> **git에 없는 것(전송 안 됨):** ① `~/.claude/.../memory/`(머신-로컬 — 핵심 내용은 `CLAUDE.md`에 반영해 둠) ② `server/data/aiops_saas.db`(실데이터, 빈 DB로 새 시작) ③ `.env`(`.env.example`에서 복사) ④ `node_modules`(`npm install`).
+> **새 세션은 `CLAUDE.md` → 이 HANDOFF 순으로 읽으면 즉시 컨텍스트 복원.** 환경 구동은 `CLAUDE.md`의 "새 머신 시작" 참조.
+> **남은 작업 1순위 = 결제 실연동(Lemon Squeezy).** 그 외 잔여는 `BACKLOG.md`.
+
+---
+
 ## 2026.06.01 (이어서 3) — 관리형 AI + 요청 수 쿼터 (판매 모델) + BYOK 보안 점검
 
 ### 한 줄 요약
