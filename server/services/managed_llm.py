@@ -37,8 +37,9 @@ async def complete(tenant_id: str, prompt: str, system: str = "",
             return await get_provider(pref, tenant_id=tenant_id).complete(
                 prompt, system=system, max_tokens=max_tokens)
 
-    # 2) 관리형 — Nova 키(env, tenant_id 미주입 → env 키 사용) + plan 쿼터
-    managed = get_provider(MANAGED_PROVIDER)
+    # 2) 관리형 — Nova 키(명시적 env만, 예: ANTHROPIC_API_KEY) + plan 쿼터
+    #    allow_claude_env_fallback=False: 호스트 ~/.claude/.env 개인 키로 폴백 차단(H2)
+    managed = get_provider(MANAGED_PROVIDER, allow_claude_env_fallback=False)
     if not await managed.load_key():
         raise LLMNotConfigured(
             "AI가 아직 설정되지 않았습니다. 연결 설정에서 본인 LLM 키를 등록하면 바로 사용할 수 있습니다.")

@@ -105,7 +105,7 @@ export function Library({ onNavigate }: { onNavigate?: (p: string) => void }) {
         <EmptyState
           icon="message-square"
           title="아직 템플릿이 없습니다"
-          desc="공유 풀의 프롬프트를 LLM으로 증류해 주제별 템플릿을 만드세요. (등록된 LLM 키 필요 · BYOK)"
+          desc="공유 풀의 프롬프트를 관리형 AI로 증류해 주제별 템플릿을 만드세요. 키 없이 바로(월 한도 차감) — 본인 키(BYOK) 등록 시 한도 없이."
           primary={{ label: '지금 증류하기', icon: 'sparkles', onClick: distill }}
         />
       ) : (

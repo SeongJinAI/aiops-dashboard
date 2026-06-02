@@ -32,7 +32,9 @@ export function envCommands(
   apiKey: string,
   tenantId: string,
 ): EnvCommands {
-  const installUrl = `${apiBase}/api/scripts/install.sh?token=${encodeURIComponent(apiKey)}`;
+  // 키는 URL이 아닌 X-API-Key 헤더로 전달 — access-log/Referer/브라우저 히스토리에 노출되지 않음.
+  const installUrl = `${apiBase}/api/scripts/install.sh`;
+  const curlInstall = `curl -fsSL -H 'X-API-Key: ${apiKey}' '${installUrl}'`;
 
   if (env === 'windows') {
     const envPath = '$env:USERPROFILE\\.claude\\.env';
@@ -44,7 +46,7 @@ export function envCommands(
     return {
       // PowerShell에서 WSL bash로 실행 (Windows native bash 가정 — git for windows 등)
       oneLineInstall:
-        `bash -c "$(curl -fsSL '${installUrl}')"`,
+        `bash -c "$(${curlInstall})"`,
       envPatch:
         `New-Item -ItemType Directory -Force "$env:USERPROFILE\\.claude" | Out-Null; ` +
         `Add-Content -Path "${envPath}" -Value "${lines}"`,
@@ -60,7 +62,7 @@ export function envCommands(
     `AIOPS_TENANT_ID=${tenantId}\\n`;
 
   return {
-    oneLineInstall: `bash -c "$(curl -fsSL '${installUrl}')"`,
+    oneLineInstall: `bash -c "$(${curlInstall})"`,
     envPatch: `mkdir -p ~/.claude && printf '${linesPosix}' >> ~/.claude/.env`,
     installHook:
       `AIOPS_REMOTE_URL=${apiBase} ` +

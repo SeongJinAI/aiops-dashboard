@@ -42,7 +42,7 @@ export function Subscribe() {
           <h1 className="page-title"><Icon name="sparkles" size={18} />구독</h1>
           <div className="page-sub">
             현재 플랜: <strong>{billing.premium ? 'Pro' : 'Free'}</strong>
-            {' '}· LLM 호출은 BYOK(내 키)로 별도 청구
+            {' '}· AI는 키 없이 바로 쓰는 관리형(플랜별 월 한도) · 본인 키(BYOK)도 가능
           </div>
         </div>
         <div className="actions">

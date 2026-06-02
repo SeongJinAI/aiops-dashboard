@@ -262,6 +262,24 @@ def scan_global_config() -> dict:
         (단일 머신 자체 호스팅 시 사용자 PC == 서버, 그대로 동작.
          원격 배포 시에는 사용자별 ~/.claude/ 정보를 Hook이 ingest 업로드하는 방식으로 분리 필요 — 추후 백로그)
     """
+    # SaaS(원격) 모드: 서버 호스트의 ~/.claude/(운영자 권한·플러그인·글로벌 CLAUDE.md·hook 명령)를
+    # 테넌트에게 절대 노출하지 않는다. 동일한 키 모양의 빈 페이로드를 반환해 프론트 호환을 유지.
+    if AIOPS_MODE == "saas":
+        return {
+            "scope": "global",
+            "sourcePath": "",
+            "governancePath": "",
+            "settings": {"exists": False, "permissions": {}, "plugins": [], "raw": None},
+            "claudeMd": {"exists": False, "content": "", "info": {}},
+            "rules": [],
+            "agents": [],
+            "skills": [],
+            "hooks": [],
+            "hookScripts": [],
+            "summary": {"totalItems": 0},
+            "note": "글로벌 설정은 서버 측 정보라 원격 모드에서는 노출되지 않습니다.",
+        }
+
     # 글로벌 settings.json
     settings_path = os.path.join(CLAUDE_HOME, "settings.json")
     settings = _read_json(settings_path)

@@ -81,10 +81,10 @@ async def integrated_installer(
     """통합 설치 스크립트.
 
     사용 옵션:
-      A) curl 한 줄:
-         bash -c "$(curl -fsSL https://<dashboard>/api/scripts/install.sh?token=<API_KEY>)"
-      B) 다운로드 후 실행 (download=1):
-         curl -o nova-install.sh "...?token=...&download=1"
+      A) curl 한 줄 (권장 — 키를 X-API-Key 헤더로 전달, URL에 노출 안 됨):
+         bash -c "$(curl -fsSL -H 'X-API-Key: <API_KEY>' https://<dashboard>/api/scripts/install.sh)"
+      B) 다운로드 후 실행 (브라우저 버튼은 헤더 전달 불가 → ?token= 폴백):
+         curl -o nova-install.sh -H 'X-API-Key: <API_KEY>' "https://<dashboard>/api/scripts/install.sh?download=1"
          bash nova-install.sh
 
     동작:
@@ -95,17 +95,20 @@ async def integrated_installer(
       5) 프로젝트 .md 자산 초기 push (Hermes 위키/RAG 입력)
       6) 테스트 ping 전송으로 연결 확인
     """
-    if not token:
-        raise HTTPException(status_code=400, detail="token 파라미터가 필요합니다")
+    # 인증 키: X-API-Key 헤더(권장 — URL/access-log/Referer에 미노출) 우선,
+    # 없으면 ?token= 쿼리(브라우저 다운로드 버튼 폴백).
+    key = request.headers.get("X-API-Key", "").strip() or token
+    if not key:
+        raise HTTPException(status_code=400, detail="API 키가 필요합니다 (X-API-Key 헤더 또는 token 파라미터)")
 
-    tenant_id = await verify_api_key_db(token)
+    tenant_id = await verify_api_key_db(key)
     if not tenant_id:
-        tenant_id = verify_api_key(token)
+        tenant_id = verify_api_key(key)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="유효하지 않은 API 키입니다")
 
     api_base = _resolve_api_base(request, base or None)
-    body = _build_integrated_script(api_base, token, tenant_id)
+    body = _build_integrated_script(api_base, key, tenant_id)
 
     headers = {}
     if download:

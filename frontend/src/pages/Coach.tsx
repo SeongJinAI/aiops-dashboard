@@ -171,7 +171,7 @@ export function Coach() {
               <div className="coach-brief"><ReactMarkdown>{brief}</ReactMarkdown></div>
             ) : (
               <div className="empty-inline">
-                등록된 LLM 키로 위 인사이트를 한국어 코치 브리핑으로 요약합니다. 키는 연결 설정에서 등록하세요(BYOK).
+                위 인사이트를 한국어 코치 브리핑으로 요약합니다. 키 없이 바로 사용(플랜별 월 한도) — 본인 LLM 키(BYOK)를 등록하면 한도 없이 쓸 수 있습니다.
               </div>
             )}
           </Box>

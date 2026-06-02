@@ -36,8 +36,14 @@ export function ProjectSwap({ activeProject, setActiveProject }: ProjectSwapProp
         repoPath: confirmSwap.repoPath || '',
         gitUrl: confirmSwap.url || '',
       });
-    } catch { /* UI 애니메이션은 계속 진행 */ }
+    } catch {
+      // 실패를 정직하게 — 가짜 성공 애니메이션을 진행하지 않는다.
+      setSwapStep(null);
+      pushToast({ tone: 'danger', title: '프로젝트 전환 실패', desc: '서버 오류로 전환하지 못했습니다. 잠시 후 다시 시도하세요.' });
+      return;
+    }
 
+    // 실제 전환 성공 후에만 단계 애니메이션 표시.
     let i = 0;
     const iv = setInterval(() => {
       i++;

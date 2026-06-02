@@ -6,21 +6,25 @@ from __future__ import annotations
 from .base import LLMProvider, ProviderName, PROVIDER_NAMES
 
 
-def get_provider(name: str, tenant_id: str | None = None) -> LLMProvider:
-    """name으로 provider 인스턴스 생성. 알 수 없으면 ValueError."""
+def get_provider(name: str, tenant_id: str | None = None,
+                 allow_claude_env_fallback: bool = True) -> LLMProvider:
+    """name으로 provider 인스턴스 생성. 알 수 없으면 ValueError.
+
+    allow_claude_env_fallback=False면 ~/.claude/.env 폴백을 끈다(관리형 경로 전용).
+    """
     name = (name or "").lower()
     if name not in PROVIDER_NAMES:
         raise ValueError(f"알 수 없는 provider: {name!r}. 사용 가능: {PROVIDER_NAMES}")
 
     if name == "anthropic":
         from .anthropic_provider import AnthropicProvider
-        return AnthropicProvider(tenant_id=tenant_id)
+        return AnthropicProvider(tenant_id=tenant_id, allow_claude_env_fallback=allow_claude_env_fallback)
     if name == "openai":
         from .openai_provider import OpenAIProvider
-        return OpenAIProvider(tenant_id=tenant_id)
+        return OpenAIProvider(tenant_id=tenant_id, allow_claude_env_fallback=allow_claude_env_fallback)
     if name == "gemini":
         from .gemini_provider import GeminiProvider
-        return GeminiProvider(tenant_id=tenant_id)
+        return GeminiProvider(tenant_id=tenant_id, allow_claude_env_fallback=allow_claude_env_fallback)
     raise ValueError(f"provider 매핑 누락: {name}")
 
 

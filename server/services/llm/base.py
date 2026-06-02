@@ -33,8 +33,12 @@ class LLMProvider(ABC):
     env_key_var: str = ""
     settings_url: str = ""
 
-    def __init__(self, tenant_id: str | None = None) -> None:
+    def __init__(self, tenant_id: str | None = None,
+                 allow_claude_env_fallback: bool = True) -> None:
         self.tenant_id = tenant_id
+        # 관리형(Nova) 경로는 호스트의 ~/.claude/.env 키로 폴백하면 안 됨
+        # (개발자 개인 키가 모든 테넌트의 '관리형 AI'로 오용·과금되는 사고 방지)
+        self.allow_claude_env_fallback = allow_claude_env_fallback
 
     # --- 공통 키 로드 ---
 
@@ -56,7 +60,7 @@ class LLMProvider(ABC):
 
     def _from_claude_env_file(self) -> str | None:
         """~/.claude/.env 에서 {ENV_KEY_VAR}= 라인을 찾는다."""
-        if not self.env_key_var:
+        if not self.allow_claude_env_fallback or not self.env_key_var:
             return None
         env_path = Path.home() / ".claude" / ".env"
         if not env_path.exists():

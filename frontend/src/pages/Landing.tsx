@@ -46,7 +46,7 @@ export function Landing({ onLogin, onGetStarted }: Props) {
                 <button className="lp-btn lp-btn-primary lp-btn-lg" onClick={onGetStarted} type="button">무료로 시작하기</button>
                 <button className="lp-btn lp-btn-ghost lp-btn-lg" onClick={onLogin} type="button">로그인</button>
               </div>
-              <p className="lp-note">신용카드 없이 시작 · BYOK(내 LLM 키) · 프롬프트 원본은 절대 공유되지 않습니다</p>
+              <p className="lp-note">신용카드 없이 시작 · 키 없이 바로 쓰는 관리형 AI · 프롬프트 원본은 절대 공유되지 않습니다</p>
             </div>
 
             {/* coach card mock */}
@@ -115,7 +115,7 @@ export function Landing({ onLogin, onGetStarted }: Props) {
         <div className="lp-wrap">
           <div className="lp-kicker">Pricing</div>
           <h2 className="lp-h2">필요한 만큼만</h2>
-          <p className="lp-sub">LLM 호출은 본인 키(BYOK)로 — 구독료 외 별도 종량 비용은 본인 계정에 청구됩니다.</p>
+          <p className="lp-sub">키 없이 바로 쓰는 관리형 AI 제공(플랜별 월 사용량 한도). 본인 키(BYOK)를 등록하면 한도 없이 본인 계정으로 직접 청구됩니다.</p>
           <div className="lp-prices">
             <div className="lp-price-card">
               <div className="lp-price-name">Free</div>

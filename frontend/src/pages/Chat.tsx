@@ -1,5 +1,5 @@
 // 지식 챗 (RAG) — 프로젝트 지식 문서를 검색해 AI가 답하는 "작업 메모리".
-// /chat/status · /chat/index · /chat/query. 검색은 키 없이도 동작, 합성 답변만 BYOK.
+// /chat/status · /chat/index · /chat/query. 검색은 키 없이 동작, 합성 답변은 관리형 AI(쿼터) 우선·BYOK 가능.
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useApi, apiPost } from '../hooks/useApi';

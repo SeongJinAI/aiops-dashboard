@@ -24,6 +24,8 @@ services:
       - app-data:/app/data
     environment:
       AIOPS_MODE: saas
+      # prod 가드 활성화 — JWT_SECRET/HERMES_MASTER_KEY 기본값이면 기동 거부(env_check/crypto/auth)
+      AIOPS_ENV: prod
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-24}
       AIOPS_CORS_ORIGINS: ${AIOPS_CORS_ORIGINS:-https://dashboard.example.com}
